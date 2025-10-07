@@ -504,47 +504,47 @@ def tremo_ler_otp(param, processador):
     return processador.ler_otp(param.address, param.size)
 
 
-### @brief Escreve na área otp0 da flash
+### @brief Escreve na área opt0 da flash
 ### @param  opt0_l: valor msb a ser escrito
 ###         opt0_h: valor lsb a ser escrito
 ### @param  processador: objeto TremoLoader já conectado
 ### @return None
 ### @exception Exception: se ocorrer algum erro
-def tremo_escrever_otp0(param, processador):
+def tremo_escrever_opt0(param, processador):
     if not tremo_conectar(processador, lista_portas_disponiveis, param.baud):
         return
     processador.escrever_opt0(param.opt0_l, param.opt0_h)
 
 
-### @brief Lê a área otp0 da flash
+### @brief Lê a área opt0 da flash
 ### @param  param: parâmetros do comando
 ### @param  processador: objeto TremoLoader já conectado
 ### @return (opt0_l, opt0_h)
 ### @exception Exception: se ocorrer algum erro
-def tremo_ler_otp0(param, processador):
+def tremo_ler_opt0(param, processador):
     if not tremo_conectar(processador, lista_portas_disponiveis, param.baud):
         return 0, 0
     return processador.ler_opt0()
 
 
-### @brief Escreve na área otp1 da flash
+### @brief Escreve na área opt1 da flash
 ### @param  opt1_l: valor msb a ser escrito
 ###         opt1_h: valor lsb a ser escrito
 ### @param  processador: objeto TremoLoader já conectado
 ### @return None
 ### @exception Exception: se ocorrer algum erro
-def tremo_escrever_otp1(param, processador):
+def tremo_escrever_opt1(param, processador):
     if not tremo_conectar(processador, lista_portas_disponiveis, param.baud):
         return
     processador.escrever_opt1(param.opt1_l, param.opt1_h)
 
 
-### @brief Lê a área otp1 da flash
+### @brief Lê a área opt1 da flash
 ### @param  param: parâmetros do comando
 ### @param  processador: objeto TremoLoader já conectado
 ### @return (opt1_l, opt1_h)
 ### @exception Exception: se ocorrer algum erro
-def tremo_ler_otp1(param, processador):
+def tremo_ler_opt1(param, processador):
     if not tremo_conectar(processador, lista_portas_disponiveis, param.baud):
         return 0, 0
     return processador.ler_opt1()
@@ -726,33 +726,33 @@ if __name__ == '__main__':
     msg_help = 'endereco flash otp'
     parser_ler_otp.add_argument('size', help=msg_help, type=arg_int)
 
-    # escrever_otp0
-    msg_help = 'escrever na area otp0 da flash'
-    parser_escrever_otp0 = subparsers.add_parser('escrever_otp0', help=msg_help)
+    # escrever_opt0
+    msg_help = 'escrever na area opt0 da flash'
+    parser_escrever_opt0 = subparsers.add_parser('escrever_opt0', help=msg_help)
 
     msg_help = 'valor msb a ser escrito'
-    parser_escrever_otp0.add_argument('opt0_l', help=msg_help, type=arg_int)
+    parser_escrever_opt0.add_argument('opt0_l', help=msg_help, type=arg_int)
 
     msg_help = 'valor lsb a ser escrito'
-    parser_escrever_otp0.add_argument('opt0_h', help=msg_help, type=arg_int)
+    parser_escrever_opt0.add_argument('opt0_h', help=msg_help, type=arg_int)
 
-    # ler_otp0
-    msg_help = 'ler a area otp0 da flash'
-    parser_ler_otp0 = subparsers.add_parser('ler_otp0', help=msg_help)
+    # ler_opt0
+    msg_help = 'ler a area opt0 da flash'
+    parser_ler_opt0 = subparsers.add_parser('ler_opt0', help=msg_help)
 
-    # escrever_otp1
-    msg_help = 'escrever na area otp1 da flash'
-    parser_escrever_otp1 = subparsers.add_parser('escrever_otp1', help=msg_help)
+    # escrever_opt1
+    msg_help = 'escrever na area opt1 da flash'
+    parser_escrever_opt1 = subparsers.add_parser('escrever_opt1', help=msg_help)
 
     msg_help = 'valor msb a ser escrito'
-    parser_escrever_otp1.add_argument('opt1_l', help=msg_help, type=arg_int)
+    parser_escrever_opt1.add_argument('opt1_l', help=msg_help, type=arg_int)
 
     msg_help = 'valor lsb a ser escrito'
-    parser_escrever_otp1.add_argument('opt1_h', help=msg_help, type=arg_int)
+    parser_escrever_opt1.add_argument('opt1_h', help=msg_help, type=arg_int)
 
-    # ler_otp1
-    msg_help = 'ler a area otp1 da flash'
-    parser_ler_otp1 = subparsers.add_parser('ler_otp1', help=msg_help)
+    # ler_opt1
+    msg_help = 'ler a area opt1 da flash'
+    parser_ler_opt1 = subparsers.add_parser('ler_opt1', help=msg_help)
 
     # serial
     msg_help = 'ler o serial do ASR'
@@ -847,25 +847,25 @@ if __name__ == '__main__':
             print('Apagado com sucesso')
         elif args.command == 'verify':
             tremo_verify(args, tremo)
-            print('Verificacao completa! Fash igual ao arquivo.')
+            print('Verificacao completa! Flash igual ao arquivo.')
         elif args.command == 'escrever_otp':
             tremo_escrever_otp(args, tremo)
             print('Escrita na OTP com sucesso')
         elif args.command == 'ler_otp':
             data = tremo_ler_otp(args, tremo)
             print('OTP data: %s' % binascii.hexlify(data))
-        elif args.command == 'escrever_otp0':
-            tremo_escrever_otp0(args, tremo)
-            print('Escrita na OTP0 com sucesso')
-        elif args.command == 'ler_otp0':
-            opt0 = tremo_ler_otp0(args, tremo)
-            print('OTP0 data: %s %s' % (hex(opt0[0]), hex(opt0[1])))
-        elif args.command == 'escrever_otp1':
-            tremo_escrever_otp1(args, tremo)
-            print('Escrita na OTP1 com sucesso')
-        elif args.command == 'ler_otp1':
-            opt1 = tremo_ler_otp1(args, tremo)
-            print('OTP1 data: %s %s' % (hex(opt1[0]), hex(opt1[1])))
+        elif args.command == 'escrever_opt0':
+            tremo_escrever_opt0(args, tremo)
+            print('Escrita na OPT0 com sucesso')
+        elif args.command == 'ler_opt0':
+            opt0 = tremo_ler_opt0(args, tremo)
+            print('OPT0 data: %s %s' % (hex(opt0[0]), hex(opt0[1])))
+        elif args.command == 'escrever_opt1':
+            tremo_escrever_opt1(args, tremo)
+            print('Escrita na OPT1 com sucesso')
+        elif args.command == 'ler_opt1':
+            opt1 = tremo_ler_opt1(args, tremo)
+            print('OPT1 data: %s %s' % (hex(opt1[0]), hex(opt1[1])))
         elif args.command == 'reset':
             tremo_sw_reset(args, tremo)
             print('Reset via software')

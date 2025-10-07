@@ -4,6 +4,40 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
 
 ---
 
+## Sumário
+- [Instalação](#instalação)
+- [Uso](#uso)
+- [Criar o novo .exe](#criar-o-novo-exe)
+- [Parâmetros globais](#parâmetros-globais)
+  - [COM PORT: -p ou --port](#com-port--p-ou---port)
+  - [Baudrate: -b ou --baudrate](#baudrate--b-ou---baudrate)
+  - [Modo log verboso: -v ou --verbose](#modo-log-verboso--v-ou---verbose)
+  - [Timeou de conexão: -t ou --timeout](#timeou-de-conexão--t-ou---timeout)
+  - [Manter EEPROM: -e ou --eeprom](#manter-eeprom--e-ou---eeprom)
+  - [Help: -h ou --help](#help--h-ou---help)
+- [Comandos](#comandos)
+  - [jump](#jump)
+  - [flash](#flash)
+  - [erase](#erase)
+  - [verify](#verify)
+  - [escrever_otp](#escrever_otp)
+  - [ler_otp](#ler_otp)
+  - [escrever_opt0](#escrever_opt0)
+  - [ler_opt0](#ler_opt0)
+  - [escrever_opt1](#escrever_opt1)
+  - [ler_opt1](#ler_opt1)
+  - [reset](#reset)
+  - [serial](#serial)
+  - [escrever_reg](#escrever_reg)
+  - [ler_reg](#ler_reg)
+  - [versao_bootloader](#versao_bootloader)
+  - [clear_eeprom](#clear_eeprom)
+  - [help](#help)
+- [Observações](#observações)
+- [Exemplo de flash.bat](#exemplo-de-flashbat)
+
+---
+
 ## Instalação
 
 Requisitos:
@@ -45,7 +79,7 @@ py -m PyInstaller --onefile tremo_loader.py
 ---
 
 ## Parâmetros globais
-### -p ou --port
+### COM PORT: -p ou --port
 Configura a porta serial.
 Caso não seja passado nada, lista as portas seriais disponíveis e tenta conectar na primeira que encontrar o dispositivo.
 
@@ -61,7 +95,7 @@ make -p COM3 flash 0x08000000 app.bin
 ```
 ---
 
-### -b ou --baudrate
+### Baudrate: -b ou --baudrate
 Configura o paudrate.
 Por padrão vem com 921600, caso não seja passado nada.
 
@@ -77,7 +111,7 @@ make -b 115200 flash 0x08000000 app.bin
 ```
 ---
 
-### -v ou --verbose
+### Modo log verboso: -v ou --verbose
 Configura modo verboso. Mostra todos os dados trafegados pela serial.
 
 **Formato:**
@@ -92,7 +126,7 @@ make -v flash 0x08000000 app.bin
 ```
 ---
 
-### -t ou --timeout
+### Timeou de conexão: -t ou --timeout
 Configura o timeout em segundos. Padrão é 2 segundos.
 
 **Estrutura:**
@@ -107,7 +141,7 @@ make -t 10 flash 0x08000000 app.bin
 ```
 ---
 
-### -e ou --eeprom
+### Manter EEPROM: -e ou --eeprom
 Mantém os dados da EEPROM ao apagar a flash.
 
 **Formato:**
@@ -122,7 +156,7 @@ make -e flash 0x08000000 app.bin
 ```
 ---
 
-### -h ou --help
+### Help: -h ou --help
 Mostra a ajuda com todos os comandos e opções.
 
 **Formato:**
@@ -212,6 +246,7 @@ ou "ERROR: flash diferente do arquivo" se houver diferença.
 Escreve dados na área OTP da flash.
 OTP (One-Time Programmable) é uma área especial da memória flash do microcontrolador que pode ser gravada apenas uma vez.
 Após a escrita, os dados não podem ser alterados ou apagados, garantindo que informações críticas (como configurações, chaves ou identificadores) fiquem permanentemente armazenadas.
+A faixa reservada para OTP é de 0x10001C00 a 0x10001FFF.
 
 **Formato:**
 ```
