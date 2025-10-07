@@ -12,9 +12,13 @@ import serial.tools.list_ports as list_ports
 lista_portas_disponiveis = []
 verbose: bool = False
 com_timeout = 2
+apaga_eeprom: bool = True
 
+VERSAO_GRAVADOR = "1.1"
 BAUD_DEFAULT = 921600
 TIMEOUT_DEFAULT = 2
+EEPROM_ENDERECO = 0x0801F000  # Endereço inicial da eeprom emulada na flash
+EEPROM_SIZE = 512             # Tamanho da eeprom emulada na flash
 
 CMD_SYNC = 1
 CMD_JUMP = 2
@@ -404,6 +408,24 @@ def tremo_erase(param, processador):
     processador.sw_reset(0)
 
 
+### @brief Apaga a eeprom emulada
+### @param  processador: objeto TremoLoader já conectado
+### @return None
+def apagar_eeprom(processador):
+    processador.erase(EEPROM_ENDERECO, EEPROM_SIZE)
+
+
+### @brief Conecta ao dispositovo e apaga a eeprom emulada
+### @param  param: parâmetros do comando
+### @param  processador: objeto TremoLoader já conectado
+### @return None
+def tremo_clean_eeprom(param, processador):
+    if not tremo_conectar(processador, lista_portas_disponiveis, param.baud):
+        return
+    apagar_eeprom(processador)
+    processador.sw_reset(0)
+
+
 ### @brief Apaga e grava a flash
 ### @param  param: lista com pares de endereco e nome do arquivo
 ### @param  processador: objeto TremoLoader já conectado
@@ -424,8 +446,8 @@ def tremo_flash(param, processador):
     if not tremo_conectar(processador, lista_portas_disponiveis, param.baud):
         return
 
-    # limpa a eeprom emulada
-    processador.erase(0x0801f000, 256)
+    if apaga_eeprom:
+        apagar_eeprom(processador)
 
     for endereco, pacote in arquivo:
         pacote_len = os.path.getsize(pacote)
@@ -620,7 +642,7 @@ def get_lista_portas_com():
     return sorted(ports.device for ports in list_ports.comports())
 
 
-### @brief Retorna a porta serial conecatda
+### @brief Retorna a porta serial conectada
 ### @param  lista_portas: lista de portas seriais
 ### @return porta serial conectada
 def get_dispositivo_conectado(lista_portas):
@@ -628,6 +650,21 @@ def get_dispositivo_conectado(lista_portas):
         print("Serial port %s" % each_port)
 
 
+def tremo_print_help(help_parser):
+    print("Tremo Loader v%s" % VERSAO_GRAVADOR)
+    help_parser.print_help()
+    print("\nPortas seriais disponiveis:")
+    portas = get_lista_portas_com()
+    if len(portas) == 0:
+        print("  Nenhuma porta serial encontrada")
+    else:
+        for porta in portas:
+            print(" ", porta)
+
+
+### @brief Adiciona os argumentos comuns ao parser
+### @param  argumentos: parser de argumentos
+### @return None
 def tremo_add_argumentos(argumentos):
     msg = 'porta serial'
     argumentos.add_argument('--port', '-p', help=msg)
@@ -640,6 +677,9 @@ def tremo_add_argumentos(argumentos):
 
     msg = 'timeout da serial em segundos, default 2s'
     argumentos.add_argument('--timeout', '-t', help=msg, type=int, default=TIMEOUT_DEFAULT)
+
+    msg = 'mantém os dados da eeprom emulada'
+    argumentos.add_argument('--eeprom', '-e', help=msg, action='store_true')
 
 
 ### @brief Programa principal
@@ -761,6 +801,18 @@ if __name__ == '__main__':
     msg_help = 'endereco para onde o jump deve ser feito'
     parser_jump.add_argument('address', help=msg_help, type=arg_int)
 
+    # eeprom
+    msg_help = 'limpa a eeprom emulada'
+    parser_eeprom = subparsers.add_parser('clear_eeprom', help=msg_help)
+
+    # help
+    msg_help = 'mostra essa mensagem de ajuda e sai'
+    parser_help = subparsers.add_parser('help', help=msg_help)
+
+    # versão tremo_loader
+    msg_help = 'mostra a versao do tremo_loader'
+    parser_version = subparsers.add_parser('versao', help=msg_help)
+
     # tremo_loader
     tremo = TremoLoader()
 
@@ -769,6 +821,14 @@ if __name__ == '__main__':
     # Seta a variável global verbose
     if args.verbose:
         verbose = True
+
+    # Seta a variável global com_timeout
+    if args.timeout is not None:
+        com_timeout = args.timeout
+
+    # Seta a variável global apaga_eeprom
+    if args.eeprom:
+        apaga_eeprom = False
 
     if args.port is None:
         lista_portas_disponiveis = get_lista_portas_com()
@@ -822,5 +882,14 @@ if __name__ == '__main__':
         elif args.command == 'versao_bootloader':
             versao = tremo_versao_bootloader(args, tremo)
             print('Versao do bootloader: %s' % hex(versao[0]))
+        elif args.command == 'clear_eeprom':
+            tremo_clean_eeprom(args, tremo)
+            print('Eeprom emulada apagada com sucesso')
+        elif args.command == 'help':
+            tremo_print_help(parser)
+        elif args.command == 'versao':
+            print("Tremo Loader v%s" % VERSAO_GRAVADOR)
+        else:
+            tremo_print_help(parser)
     except Exception as e:
         print(str(e))
