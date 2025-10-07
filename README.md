@@ -32,6 +32,10 @@ make <comando> [opções] [argumentos]
 
 ## Criar o novo .exe
 ```
+build.bat
+```
+ou
+```
 pyinstaller --onefile tremo_loader.py
 ```
 ou

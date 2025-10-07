@@ -9,16 +9,11 @@ import zlib
 import binascii
 import serial.tools.list_ports as list_ports
 
-lista_portas_disponiveis = []
-verbose: bool = False
-com_timeout = 2
-apaga_eeprom: bool = True
-
-VERSAO_GRAVADOR = "1.1"
+VERSAO_GRAVADOR = "101"
 BAUD_DEFAULT = 921600
 TIMEOUT_DEFAULT = 2
 EEPROM_ENDERECO = 0x0801F000  # Endereço inicial da eeprom emulada na flash
-EEPROM_SIZE = 512             # Tamanho da eeprom emulada na flash
+EEPROM_SIZE = 512  # Tamanho da eeprom emulada na flash
 
 CMD_SYNC = 1
 CMD_JUMP = 2
@@ -39,6 +34,10 @@ CMD_BAUDRATE = 16
 CMD_VERSION = 17
 CMD_PORT = 18
 
+lista_portas_disponiveis = []
+verbose: bool = False
+com_timeout = 2
+apaga_eeprom: bool = True
 
 ### @brief Classe para comunicação com o bootloader do Tremo
 class TremoLoader(object):
