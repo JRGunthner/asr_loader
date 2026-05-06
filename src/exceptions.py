@@ -1,0 +1,3 @@
+class CmdExcessao(Exception):
+    pass
+

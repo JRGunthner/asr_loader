@@ -12,7 +12,7 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
   - [COM PORT: -p ou --port](#com-port--p-ou---port)
   - [Baudrate: -b ou --baudrate](#baudrate--b-ou---baudrate)
   - [Modo log verboso: -v ou --verbose](#modo-log-verboso--v-ou---verbose)
-  - [Timeou de conexão: -t ou --timeout](#timeou-de-conexão--t-ou---timeout)
+  - [Timeou de conexão: -t ou --timeout](#timeout-de-conexão--t-ou---timeout)
   - [Manter EEPROM: -e ou --eeprom](#manter-eeprom--e-ou---eeprom)
   - [Help: -h ou --help](#help--h-ou---help)
 - [Comandos](#comandos)
@@ -126,7 +126,7 @@ make -v flash 0x08000000 app.bin
 ```
 ---
 
-### Timeou de conexão: -t ou --timeout
+### Timeout de conexão: -t ou --timeout
 Configura o timeout em segundos. Padrão é 2 segundos.
 
 **Estrutura:**
