@@ -32,6 +32,7 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
   - [ler_reg](#ler_reg)
   - [versao_bootloader](#versao_bootloader)
   - [clear_eeprom](#clear_eeprom)
+  - [ota_pack](#ota_pack)
   - [help](#help)
 - [Observações](#observações)
 - [Exemplo de flash.bat](#exemplo-de-flashbat)
@@ -337,6 +338,7 @@ Lê os dados da área OPT1 da flash.
 ```
 ler_opt1
 ```
+
 **Exemplo:**
 ```
 python tremo_loader.py ler_opt1
@@ -448,6 +450,23 @@ python tremo_loader.py clear_eeprom
 ```
 Apaga toda a memória EEPROM do microcontrolador.
 Exemplo de saída: `EEPROM apagada com sucesso!`
+
+---
+
+### ota_pack
+Gera um pacote OTA com header de 16 bytes e concatena com o firmware `.bin`.
+Use esse arquivo para gravação na flash externa a partir do endereço `0x00000000`.
+
+**Formato:**
+```
+ota_pack <arquivo_firmware.bin> [arquivo_saida.bin]
+```
+
+**Exemplo:**
+```
+python tremo_loader.py ota_pack app.bin app_ota.bin
+```
+Se `arquivo_saida.bin` não for informado, o nome padrão será `<arquivo_firmware>_ota.bin`.
 
 ---
 

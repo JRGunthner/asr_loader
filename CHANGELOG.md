@@ -1,5 +1,7 @@
-## v102 - 2025-10-07
+## v103 - Unreleased
+- Adição do comando para gerar a versão de firmware OTA
 
+## v102 - 2025-10-07
 - Estruturação modular da aplicação em `src/`, separando CLI, comandos, protocolo, constantes, utilitários e runtime.
 - Fluxo principal de uso mantido: descoberta de portas, conexão, envio de comandos e validações básicas da CLI.
 - `tremo_loader.py` mantido como ponto de entrada compatível, delegando execução para `src/cli.py`.

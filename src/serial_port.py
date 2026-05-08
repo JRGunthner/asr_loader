@@ -1,8 +1,8 @@
 import serial
 
 
+"""Adapter da pyserial para desacoplar a camada de protocolo."""
 class SerialPort(object):
-    """Adapter da pyserial para desacoplar a camada de protocolo."""
 
     def __init__(self, port, baudrate, timeout):
         self._serial = serial.Serial(port, baudrate, timeout=timeout)

@@ -1,7 +1,7 @@
 import binascii
 import os
-
-from .constantes import EEPROM_ENDERECO, EEPROM_SIZE
+import struct
+from .constantes import EEPROM_ENDERECO, EEPROM_SIZE, OTA_MAGIC
 from .utils import get_crc32
 
 
@@ -171,3 +171,31 @@ def tremo_jump(param, processador, config):
         return
     processador.jump(param.address)
 
+
+def tremo_ota_pack(param):
+    fw_path = param.firmware
+    if not os.path.isfile(fw_path):
+        raise Exception('ERROR: arquivo nao encontrado: %s' % fw_path)
+
+    if param.output is None:
+        base, ext = os.path.splitext(fw_path)
+        out_path = '%s_ota%s' % (base, ext)
+    else:
+        out_path = param.output
+
+    with open(fw_path, 'rb') as arquivo:
+        fw_data = arquivo.read()
+
+    fw_size = len(fw_data)
+    fw_crc = binascii.crc32(fw_data) & 0xFFFFFFFF
+    header = struct.pack('<IIII', OTA_MAGIC, fw_size, fw_crc, 0)
+
+    with open(out_path, 'wb') as arquivo:
+        arquivo.write(header)
+        arquivo.write(fw_data)
+
+    print('Firmware : %s' % fw_path)
+    print('Tamanho  : %d bytes (0x%X)' % (fw_size, fw_size))
+    print('CRC32    : 0x%08X' % fw_crc)
+    print('Saida    : %s  (%d bytes no total)' % (out_path, len(header) + fw_size))
+    print('Grave o arquivo de saida a partir do endereco 0x00000000 da flash externa.')

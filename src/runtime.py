@@ -9,4 +9,3 @@ class RuntimeConfig(object):
         self.apaga_eeprom = apaga_eeprom
         self.baud = baud
         self.portas_disponiveis = list(portas_disponiveis or [])
-

@@ -1,6 +1,5 @@
 import argparse
 import binascii
-
 from .comandos import (
     tremo_clean_eeprom,
     tremo_erase,
@@ -14,13 +13,14 @@ from .comandos import (
     tremo_ler_opt1,
     tremo_ler_otp,
     tremo_ler_reg,
+    tremo_ota_pack,
     tremo_serial_asr,
     tremo_sw_reset,
     tremo_verify,
     tremo_versao_bootloader,
 )
 from .constantes import BAUD_DEFAULT, TIMEOUT_DEFAULT, VERSAO_GRAVADOR
-from .protocolo import TremoLoader
+from .tremoLoader import TremoLoader
 from .runtime import RuntimeConfig
 from .utils import arg_int, get_lista_portas_com
 
@@ -106,7 +106,10 @@ def build_parser():
     parser_jump = subparsers.add_parser('jump', help='executar um jump para um endereco')
     parser_jump.add_argument('address', help='endereco para onde o jump deve ser feito', type=arg_int)
 
-    subparsers.add_parser('clear_eeprom', help='limpa a eeprom emulada')
+    parser_ota_pack = subparsers.add_parser('ota_pack', help='gera pacote OTA com header + firmware binario')
+    parser_ota_pack.add_argument('firmware', help='arquivo .bin de firmware')
+    parser_ota_pack.add_argument('output', nargs='?', help='arquivo de saida (padrao: <firmware>_ota.bin)')
+
     subparsers.add_parser('help', help='mostra essa mensagem de ajuda e sai')
     subparsers.add_parser('versao', help='mostra a versao do tremo_loader')
 
@@ -117,20 +120,31 @@ def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    config = RuntimeConfig(
-        verbose=args.verbose,
-        com_timeout=args.timeout if args.timeout is not None else TIMEOUT_DEFAULT,
-        apaga_eeprom=not args.eeprom,
-        baud=args.baud,
-        portas_disponiveis=get_lista_portas_com() if args.port is None else [args.port],
-    )
-
-    if args.port is None:
-        print("Encontrado %d serial ports" % len(config.portas_disponiveis))
-
-    tremo = TremoLoader(config)
-
     try:
+        if args.command is None or args.command == 'help':
+            tremo_print_help(parser)
+            return
+        if args.command == 'versao':
+            print("Tremo Loader v%s" % VERSAO_GRAVADOR)
+            return
+        if args.command == 'ota_pack':
+            tremo_ota_pack(args)
+            print('Pacote OTA gerado com sucesso')
+            return
+
+        config = RuntimeConfig(
+            verbose=args.verbose,
+            com_timeout=args.timeout if args.timeout is not None else TIMEOUT_DEFAULT,
+            apaga_eeprom=not args.eeprom,
+            baud=args.baud,
+            portas_disponiveis=get_lista_portas_com() if args.port is None else [args.port],
+        )
+
+        if args.port is None:
+            print("Encontrado %d serial ports" % len(config.portas_disponiveis))
+
+        tremo = TremoLoader(config)
+
         if args.command == 'jump':
             tremo_jump(args, tremo, config)
             print('Jump executado com sucesso')
@@ -179,12 +193,7 @@ def main(argv=None):
         elif args.command == 'clear_eeprom':
             tremo_clean_eeprom(args, tremo, config)
             print('Eeprom emulada apagada com sucesso')
-        elif args.command == 'help':
-            tremo_print_help(parser)
-        elif args.command == 'versao':
-            print("Tremo Loader v%s" % VERSAO_GRAVADOR)
         else:
             tremo_print_help(parser)
     except Exception as excessao:
         print(str(excessao))
-

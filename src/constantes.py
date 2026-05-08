@@ -1,8 +1,9 @@
-VERSAO_GRAVADOR = "102"
+VERSAO_GRAVADOR = "103"
 BAUD_DEFAULT = 921600
 TIMEOUT_DEFAULT = 2
 EEPROM_ENDERECO = 0x0801F000  # Endereço inicial da eeprom emulada na flash
 EEPROM_SIZE = 512  # Tamanho da eeprom emulada na flash
+OTA_MAGIC = 0xB00710AD # Valor para identificar o formato do firmware OTA
 
 CMD_SYNC = 1
 CMD_JUMP = 2
@@ -22,4 +23,3 @@ CMD_RDREG = 15
 CMD_BAUDRATE = 16
 CMD_VERSION = 17
 CMD_PORT = 18
-
