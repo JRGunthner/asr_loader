@@ -1,4 +1,4 @@
-## v102 - Unreleased
+## v102 - 2025-10-07
 
 - Estruturação modular da aplicação em `src/`, separando CLI, comandos, protocolo, constantes, utilitários e runtime.
 - Fluxo principal de uso mantido: descoberta de portas, conexão, envio de comandos e validações básicas da CLI.
@@ -7,3 +7,4 @@
 - Nova abstração de comunicação serial em `src/serial_port.py` com a classe `SerialPort`.
 - `src/protocolo.py` deixou de depender diretamente de `pyserial` e passou a usar `SerialPort`.
 - Operações de controle de linha e buffers (`DTR/RTS`, flush de entrada/saída) foram centralizadas na abstração serial.
+- Release
