@@ -54,7 +54,7 @@ def tremo_flash(param, processador, config):
         arquivos.append((endereco, arquivo))
 
     if not tremo_conectar(processador, config.portas_disponiveis, param.baud):
-        return
+        return False
 
     if config.apaga_eeprom:
         apagar_eeprom(processador)
@@ -88,6 +88,7 @@ def tremo_flash(param, processador, config):
         print('.')
 
     processador.sw_reset(0)
+    return True
 
 
 def tremo_escrever_otp(param, processador, config):

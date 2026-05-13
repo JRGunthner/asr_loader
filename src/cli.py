@@ -149,8 +149,9 @@ def main(argv=None):
             tremo_jump(args, tremo, config)
             print('Jump executado com sucesso')
         elif args.command == 'flash':
-            tremo_flash(args, tremo, config)
-            print('Gravado com sucesso')
+            gravado = tremo_flash(args, tremo, config)
+            if gravado:
+                print('Gravado com sucesso')
         elif args.command == 'erase':
             tremo_erase(args, tremo, config)
             print('Apagado com sucesso')
