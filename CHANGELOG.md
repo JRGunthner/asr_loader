@@ -1,5 +1,6 @@
 ## v103 - Unreleased
 - Adição do comando para gerar a versão de firmware OTA
+- Adicionado endereço da eeprom do ASR6601SE
 
 ## v102 - 2025-10-07
 - Estruturação modular da aplicação em `src/`, separando CLI, comandos, protocolo, constantes, utilitários e runtime.

@@ -1,7 +1,10 @@
 VERSAO_GRAVADOR = "103"
 BAUD_DEFAULT = 921600
 TIMEOUT_DEFAULT = 2
-EEPROM_ENDERECO = 0x0801F000  # Endereço inicial da eeprom emulada na flash
+OFFSET_EEPROM_CB = ((128 - 4) * 1024) + 0x08000000
+OFFSET_EEPROM_SE = ((256 - 4) * 1024) + 0x08000000
+EEPROM_ENDERECO_ASR6601CB = OFFSET_EEPROM_CB  # Endereço inicial da eeprom emulada na flash
+EEPROM_ENDERECO_ASR6601SE = OFFSET_EEPROM_SE  # Endereço inicial da eeprom emulada na flash
 EEPROM_SIZE = 512  # Tamanho da eeprom emulada na flash
 OTA_MAGIC = 0xB00710AD # Valor para identificar o formato do firmware OTA
 

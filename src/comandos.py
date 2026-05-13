@@ -1,7 +1,7 @@
 import binascii
 import os
 import struct
-from .constantes import EEPROM_ENDERECO, EEPROM_SIZE, OTA_MAGIC
+from .constantes import EEPROM_ENDERECO_ASR6601CB, EEPROM_ENDERECO_ASR6601SE, EEPROM_SIZE, OTA_MAGIC
 from .utils import get_crc32
 
 
@@ -26,7 +26,8 @@ def tremo_erase(param, processador, config):
 
 
 def apagar_eeprom(processador):
-    processador.erase(EEPROM_ENDERECO, EEPROM_SIZE)
+    processador.erase(EEPROM_ENDERECO_ASR6601CB, EEPROM_SIZE)
+    processador.erase(EEPROM_ENDERECO_ASR6601SE, EEPROM_SIZE)
 
 
 def tremo_clean_eeprom(param, processador, config):
