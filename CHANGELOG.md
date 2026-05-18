@@ -1,9 +1,11 @@
-## v103 - Unreleased
+## v1.3 - Unreleased
 - Adição do comando para gerar a versão de firmware OTA
 - Adicionado endereço da eeprom do ASR6601SE
 - Correção do bug da mensagem de erro de gravação sempre concluída
+- Durante `flash`, o apagamento de EEPROM não exibe erro de mapeamento ausente e passa a informar o mapeamento/chip detectado.
+- Durante `flash`, identifica o chip (`ASR6601CB ou ASR6601SE`).
 
-## v102 - 2025-10-07
+## v1.2 - 2025-10-07
 - Estruturação modular da aplicação em `src/`, separando CLI, comandos, protocolo, constantes, utilitários e runtime.
 - Fluxo principal de uso mantido: descoberta de portas, conexão, envio de comandos e validações básicas da CLI.
 - `tremo_loader.py` mantido como ponto de entrada compatível, delegando execução para `src/cli.py`.

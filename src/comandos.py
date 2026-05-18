@@ -25,9 +25,30 @@ def tremo_erase(param, processador, config):
     processador.sw_reset(0)
 
 
-def apagar_eeprom(processador):
-    processador.erase(EEPROM_ENDERECO_ASR6601CB, EEPROM_SIZE)
-    processador.erase(EEPROM_ENDERECO_ASR6601SE, EEPROM_SIZE)
+def apagar_eeprom(processador, mostrar_erros=True):
+    enderecos_eeprom = (
+        ("ASR6601CB", EEPROM_ENDERECO_ASR6601CB),
+        ("ASR6601SE", EEPROM_ENDERECO_ASR6601SE),
+    )
+    variantes_detectadas = []
+    falhas = []
+
+    for variante, endereco in enderecos_eeprom:
+        try:
+            processador.erase(endereco, EEPROM_SIZE)
+            variantes_detectadas.append(variante)
+        except Exception as excessao:
+            if mostrar_erros:
+                print('Aviso: nao foi possivel apagar EEPROM para %s em %s: %s' % (variante, hex(endereco), excessao))
+            falhas.append((variante, excessao))
+
+    if len(falhas) == len(enderecos_eeprom):
+        raise Exception('ERROR: falha ao apagar EEPROM em todos os mapeamentos testados')
+
+    if len(variantes_detectadas) == 1:
+        print('Dispositivo identificado: %s' % variantes_detectadas[0])
+    elif len(variantes_detectadas) > 1:
+        print('Dispositivo identificado: %s' % variantes_detectadas[1])
 
 
 def tremo_clean_eeprom(param, processador, config):
@@ -57,7 +78,7 @@ def tremo_flash(param, processador, config):
         return False
 
     if config.apaga_eeprom:
-        apagar_eeprom(processador)
+        apagar_eeprom(processador, mostrar_erros=False)
 
     for endereco, pacote in arquivos:
         pacote_len = os.path.getsize(pacote)
