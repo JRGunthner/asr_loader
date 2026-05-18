@@ -4,6 +4,7 @@
 - Correção do bug da mensagem de erro de gravação sempre concluída
 - Durante `flash`, o apagamento de EEPROM não exibe erro de mapeamento ausente e passa a informar o mapeamento/chip detectado.
 - Durante `flash`, identifica o chip (`ASR6601CB ou ASR6601SE`).
+- Novo script `atualizar-builds.bat` copia automaticamente o executável versionado mais recente de `dist\tremo_loader-v*.exe` para as pastas de tools dos projetos com ASR.
 
 ## v1.2 - 2025-10-07
 - Estruturação modular da aplicação em `src/`, separando CLI, comandos, protocolo, constantes, utilitários e runtime.

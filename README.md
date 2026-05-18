@@ -79,6 +79,13 @@ py -m PyInstaller --onefile tremo_loader.py
 ```
 ---
 
+## Substituir o tremo_loader.exe em projetos com ASR:
+Este script copia automaticamente o executável versionado mais recente de `dist\tremo_loader-v*.exe` para as pastas de tools dos projetos com ASR.
+```
+atualizar-builds.bat
+```
+---
+
 ## Parâmetros globais
 ### COM PORT: -p ou --port
 Configura a porta serial.
