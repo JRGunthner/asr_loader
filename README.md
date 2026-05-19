@@ -438,8 +438,13 @@ versao_bootloader
 ```
 python tremo_loader.py versao_bootloader
 ```
-Retorna a versão do bootloader.
-Exemplo de saída: `1.0.0`
+Retorna o `version number` bruto do comando `VERSION`.
+Exemplo de formato da saída:
+```text
+VERSION retornado pelo bootloader (valor bruto): 0x00000000 (0)
+Bytes retornados (little-endian): 00 00 00 00
+```
+Os valores acima são apenas ilustrativos; o conteúdo real depende do que o bootloader interno responder no dispositivo.
 
 ---
 

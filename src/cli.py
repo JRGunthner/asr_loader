@@ -1,5 +1,6 @@
 import argparse
 import binascii
+import struct
 from .comandos import (
     tremo_clean_eeprom,
     tremo_erase,
@@ -94,7 +95,7 @@ def build_parser():
     parser_verify.add_argument('address', help='endereco da flash a ser verificado', type=arg_int)
     parser_verify.add_argument('filename', help='arquivo para comparar com a flash')
 
-    subparsers.add_parser('versao_bootloader', help='ler a versao do bootloader')
+    subparsers.add_parser('versao_bootloader', help='ler o version number bruto retornado pelo comando VERSION do bootloader')
 
     parser_ler_reg = subparsers.add_parser('ler_reg', help='ler o conteudo de um registrador')
     parser_ler_reg.add_argument('address', help='endereco do registrador a ser lido', type=arg_int)
@@ -190,7 +191,10 @@ def main(argv=None):
             print('Valor do registrador: 0x%s' % valor_reg[0])
         elif args.command == 'versao_bootloader':
             versao = tremo_versao_bootloader(args, tremo, config)
-            print('Versao do bootloader: %s' % hex(versao[0]))
+            versao_raw = versao[0]
+            versao_bytes = ' '.join('%02X' % byte for byte in struct.pack('<I', versao_raw))
+            print('VERSION retornado pelo bootloader (valor bruto): 0x%08X (%d)' % (versao_raw, versao_raw))
+            print('Bytes retornados: %s' % versao_bytes)
         elif args.command == 'clear_eeprom':
             tremo_clean_eeprom(args, tremo, config)
             print('Eeprom emulada apagada com sucesso')
