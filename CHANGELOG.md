@@ -5,6 +5,7 @@
 - Durante `flash`, o apagamento de EEPROM não exibe erro de mapeamento ausente e passa a informar o mapeamento/chip detectado.
 - Durante `flash`, identifica o chip (`ASR6601CB ou ASR6601SE`).
 - Novo script `atualizar-builds.bat` copia automaticamente o executável versionado mais recente de `dist\tremo_loader-v*.exe` para as pastas de tools dos projetos com ASR.
+- Adição do comando `ota_assinado` para gerar pacote OTA assinado com `--firmware-version` e `--key-header`.
 
 ## v1.2 - 2025-10-07
 - Estruturação modular da aplicação em `src/`, separando CLI, comandos, protocolo, constantes, utilitários e runtime.

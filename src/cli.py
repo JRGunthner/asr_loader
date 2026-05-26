@@ -15,6 +15,8 @@ from .comandos import (
     tremo_ler_otp,
     tremo_ler_reg,
     tremo_ota_pack,
+    tremo_ota_assinado,
+    tremo_ota_assinado_verify,
     tremo_serial_asr,
     tremo_sw_reset,
     tremo_verify,
@@ -111,6 +113,16 @@ def build_parser():
     parser_ota_pack.add_argument('firmware', help='arquivo .bin de firmware')
     parser_ota_pack.add_argument('output', nargs='?', help='arquivo de saida (padrao: <firmware>_ota.bin)')
 
+    parser_ota_assinado = subparsers.add_parser('ota_assinado', help='gera pacote OTA assinado com trailer de autenticacao')
+    parser_ota_assinado.add_argument('firmware', help='arquivo .bin de firmware sem header OTA')
+    parser_ota_assinado.add_argument('output', nargs='?', help='arquivo de saida (padrao: <firmware>_ota_assinado.bin)')
+    parser_ota_assinado.add_argument('--firmware-version', type=arg_int, default=1, help='versao numerica do firmware usada na autenticacao')
+    parser_ota_assinado.add_argument('--key-header', help='header C com BOOT_SECURITY_KEY_BYTES')
+
+    parser_ota_assinado_verify = subparsers.add_parser('ota_assinado_verify', help='verifica um pacote OTA assinado com trailer de autenticacao')
+    parser_ota_assinado_verify.add_argument('input', help='arquivo OTA assinado para verificacao')
+    parser_ota_assinado_verify.add_argument('--key-header', help='header C com BOOT_SECURITY_KEY_BYTES')
+
     subparsers.add_parser('help', help='mostra essa mensagem de ajuda e sai')
     subparsers.add_parser('versao', help='mostra a versao do tremo_loader')
 
@@ -131,6 +143,14 @@ def main(argv=None):
         if args.command == 'ota_pack':
             tremo_ota_pack(args)
             print('Pacote OTA gerado com sucesso')
+            return
+        if args.command == 'ota_assinado':
+            tremo_ota_assinado(args)
+            print('Pacote OTA assinado gerado com sucesso')
+            return
+        if args.command == 'ota_assinado_verify':
+            tremo_ota_assinado_verify(args)
+            print('Pacote OTA assinado verificado com sucesso')
             return
 
         config = RuntimeConfig(

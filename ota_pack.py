@@ -6,7 +6,7 @@ Uso:
     python ota_pack.py <firmware.bin> [saida.bin]
 
 Exemplo:
-    python ota_pack.py release\postyou.bin release\postyou_ota.bin
+    python ota_pack.py release\\postyou.bin release\\postyou_ota.bin
 
 O arquivo de saida deve ser gravado a partir do endereco 0x00000000
 da flash externa (SPI). O formato e:
@@ -29,8 +29,8 @@ import os
 OTA_MAGIC = 0xB00710AD
 
 
-def pack(fw_path: str, out_path: str) -> None:
-    with open(fw_path, "rb") as f:
+def pack(fw_path_pack: str, out_path_pack: str) -> None:
+    with open(fw_path_pack, "rb") as f:
         fw_data = f.read()
 
     fw_size = len(fw_data)
@@ -38,14 +38,14 @@ def pack(fw_path: str, out_path: str) -> None:
 
     header = struct.pack("<IIII", OTA_MAGIC, fw_size, fw_crc, 0)
 
-    with open(out_path, "wb") as f:
+    with open(out_path_pack, "wb") as f:
         f.write(header)
         f.write(fw_data)
 
-    print(f"Firmware : {fw_path}")
+    print(f"Firmware : {fw_path_pack}")
     print(f"Tamanho  : {fw_size} bytes (0x{fw_size:X})")
     print(f"CRC32    : 0x{fw_crc:08X}")
-    print(f"Saida    : {out_path}  ({len(header) + fw_size} bytes no total)")
+    print(f"Saida    : {out_path_pack}  ({len(header) + fw_size} bytes no total)")
     print()
     print("Grave o arquivo de saida a partir do endereco 0x00000000 da flash externa.")
 

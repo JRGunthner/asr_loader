@@ -6,14 +6,35 @@ echo    de build mais recentes nas pastas dos firmwares
 echo ====================================================
 echo.
 
+@echo off
+echo ===============================================
+echo    BUILD
+echo ===============================================
+echo.
+REM Ativar ambiente virtual se existir
+if exist .venv\Scripts\activate.bat (
+    echo Ativando ambiente virtual...
+    call .venv\Scripts\activate.bat
+)
+
+REM Executar o script do build
+python build.py
+echo ===============================================
+
 setlocal
 
 set "SCRIPT_DIR=%~dp0"
 set "DIST_DIR=%SCRIPT_DIR%dist"
 set "SOURCE_EXE="
+set "SOURCE_MANUAL=%SCRIPT_DIR%README.md"
 
 if not exist "%DIST_DIR%\" (
 	echo ERRO: pasta dist nao encontrada em "%DIST_DIR%"
+	exit /b 1
+)
+
+if not exist "%SOURCE_MANUAL%" (
+	echo ERRO: arquivo README.md nao encontrado em "%SOURCE_MANUAL%"
 	exit /b 1
 )
 
@@ -54,5 +75,12 @@ if errorlevel 1 (
 	exit /b 1
 )
 
+copy /Y "%SOURCE_MANUAL%" "%TARGET_DIR%\MANUAL_tremo_loader.md" >nul
+if errorlevel 1 (
+	echo ERRO: falha ao copiar para "%TARGET_DIR%\MANUAL_tremo_loader.md"
+	exit /b 1
+)
+
 echo Copiado para "%TARGET_DIR%\tremo_loader.exe"
+echo Copiado para "%TARGET_DIR%\MANUAL_tremo_loader.md"
 goto :eof

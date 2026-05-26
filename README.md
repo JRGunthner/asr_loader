@@ -12,7 +12,7 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
   - [COM PORT: -p ou --port](#com-port--p-ou---port)
   - [Baudrate: -b ou --baudrate](#baudrate--b-ou---baudrate)
   - [Modo log verboso: -v ou --verbose](#modo-log-verboso--v-ou---verbose)
-  - [Timeou de conexão: -t ou --timeout](#timeout-de-conexão--t-ou---timeout)
+  - [Timeout de conexão: -t ou --timeout](#timeout-de-conexão--t-ou---timeout)
   - [Manter EEPROM: -e ou --eeprom](#manter-eeprom--e-ou---eeprom)
   - [Help: -h ou --help](#help--h-ou---help)
 - [Comandos](#comandos)
@@ -33,6 +33,8 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
   - [versao_bootloader](#versao_bootloader)
   - [clear_eeprom](#clear_eeprom)
   - [ota_pack](#ota_pack)
+  - [ota_assinado](#ota_assinado)
+  - [ota_assinado_verify](#ota_assinado_verify)
   - [help](#help)
 - [Observações](#observações)
 - [Exemplo de flash.bat](#exemplo-de-flashbat)
@@ -44,7 +46,7 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
 Requisitos:
 - Python 3.x
 - Instalar dependências:
-```
+```powershell
 pip install -r requirements.txt
 ```
 ---
@@ -52,36 +54,36 @@ pip install -r requirements.txt
 ## Uso
 
 Execute o script via terminal:
-```
+```powershell
 py tremo_loader.py <comando> [opções] [argumentos]
 ```
 ou
-```
+```powershell
 .\tremo_loader.exe <comando> [opções] [argumentos]
 ```
 ou
-```
+```powershell
 make <comando> [opções] [argumentos]
 ```
 ---
 
 ## Criar o novo .exe
-```
+```bat
 build.bat
 ```
 ou
-```
+```powershell
 pyinstaller --onefile tremo_loader.py
 ```
 ou
-```
+```powershell
 py -m PyInstaller --onefile tremo_loader.py
 ```
 ---
 
 ## Substituir o tremo_loader.exe em projetos com ASR:
 Este script copia automaticamente o executável versionado mais recente de `dist\tremo_loader-v*.exe` para as pastas de tools dos projetos com ASR.
-```
+```bat
 atualizar-builds.bat
 ```
 ---
@@ -92,29 +94,29 @@ Configura a porta serial.
 Caso não seja passado nada, lista as portas seriais disponíveis e tenta conectar na primeira que encontrar o dispositivo.
 
 **Formato:**
-```
+```text
 -p <porta_serial>
 --port <porta_serial>
 ```
 
 **Exemplo:**
-```
+```powershell
 make -p COM3 flash 0x08000000 app.bin
 ```
 ---
 
 ### Baudrate: -b ou --baudrate
-Configura o paudrate.
+Configura o baudrate.
 Por padrão vem com 921600, caso não seja passado nada.
 
 **Formato:**
-```
+```text
 -b <baudrate>
 --baudrate <baudrate>
 ```
 
 **Exemplo:**
-```
+```powershell
 make -b 115200 flash 0x08000000 app.bin
 ```
 ---
@@ -123,13 +125,13 @@ make -b 115200 flash 0x08000000 app.bin
 Configura modo verboso. Mostra todos os dados trafegados pela serial.
 
 **Formato:**
-```
+```text
 -v
 --verbose
 ```
 
 **Exemplo:**
-```
+```powershell
 make -v flash 0x08000000 app.bin
 ```
 ---
@@ -138,13 +140,13 @@ make -v flash 0x08000000 app.bin
 Configura o timeout em segundos. Padrão é 2 segundos.
 
 **Estrutura:**
-```
+```text
 -t <segundos>
 --timeout <segundos>
 ```
 
 **Formato:**
-```
+```powershell
 make -t 10 flash 0x08000000 app.bin
 ```
 ---
@@ -153,13 +155,13 @@ make -t 10 flash 0x08000000 app.bin
 Mantém os dados da EEPROM ao apagar a flash.
 
 **Formato:**
-```
+```text
 -e
 --eeprom
 ```
 
 **Exemplo:**
-```
+```powershell
 make -e flash 0x08000000 app.bin
 ```
 ---
@@ -168,13 +170,13 @@ make -e flash 0x08000000 app.bin
 Mostra a ajuda com todos os comandos e opções.
 
 **Formato:**
-```
+```text
 -h
 --help
 ```
 
 **Exemplo:**
-```
+```powershell
 make -h
 ```
 ---
@@ -187,12 +189,12 @@ Faz o microcontrolador executar um salto (jump) para o endereço especificado, t
 Isso é usado, por exemplo, para iniciar a execução de um novo firmware já gravado na flash.
 
 **Formato:**
-```
+```text
 jump <endereço_de_jump>
 ```
 
 **Exemplo:**
-```
+```powershell
 python tremo_loader.py jump 0x08000123
 ```
 Faz um jump para o endereço 0x08000123.
@@ -204,12 +206,12 @@ Este comando não retorna nada.
 Apaga e grava arquivos na flash.
 
 **Formato:**
-```
+```text
 flash <endereço_inicial> <arquivo.bin>
 ```
 
 **Exemplo:**
-```
+```powershell
 python tremo_loader.py flash 0x08000000 app.bin
 ```
 Grava o arquivo `app.bin` no endereço 0x08000000.
@@ -220,12 +222,12 @@ Grava o arquivo `app.bin` no endereço 0x08000000.
 Apaga uma área da flash a partir de um endereço específico.
 
 **Formato:**
-```
+```text
 erase <endereço_inicial> <tamanho_em_bytes>
 ```
 
 **Exemplo:**
-```
+```powershell
 python tremo_loader.py erase 0x08000000 4096
 ```
 Apaga 4096 bytes a partir do endereço 0x08000000.
@@ -236,16 +238,16 @@ Apaga 4096 bytes a partir do endereço 0x08000000.
 Verifica o conteúdo da flash comparando com um arquivo.
 
 **Formato:**
-```
+```text
 verify <endereço_inicial> <arquivo.bin>
 ```
 
 **Exemplo:**
-```
+```powershell
 python tremo_loader.py verify 0x08000000 app.bin
 ```
 Verifica se o conteúdo da flash a partir de 0x08000000 é igual ao arquivo `app.bin`.
-Retorna "Verificacao completa! Fash igual ao arquivo." se for igual,
+Retorna "Verificacao completa! Flash igual ao arquivo." se for igual,
 ou "ERROR: flash diferente do arquivo" se houver diferença.
 
 ---
@@ -257,12 +259,12 @@ Após a escrita, os dados não podem ser alterados ou apagados, garantindo que i
 A faixa reservada para OTP é de 0x10001C00 a 0x10001FFF.
 
 **Formato:**
-```
+```text
 escrever_otp <endereço_inicial> <dados_em_hex>
 ```
 
 **Exemplo:**
-```
+```powershell
 python tremo_loader.py escrever_otp 0x1FFF7000 aabbccdd
 ```
 Escreve os bytes `aabbccdd` no endereço 0x1FFF7000.
@@ -273,12 +275,12 @@ Escreve os bytes `aabbccdd` no endereço 0x1FFF7000.
 Lê dados da área OTP da flash.
 
 **Formato:**
-```
+```text
 ler_otp <endereço_inicial> <tamanho_em_bytes>
 ```
 
 **Exemplo:**
-```
+```powershell
 python tremo_loader.py ler_otp 0x1FFF7000 16
 ```
 Lê 16 bytes a partir do endereço 0x1FFF7000.
@@ -291,12 +293,12 @@ A área OPT0 (Option Bytes 0) é uma seção especial da memória flash do micro
 Essas opções podem incluir configurações de proteção de memória, modos de boot, e outras funcionalidades que afetam o comportamento do microcontrolador.
 
 **Formato:**
-```
+```text
 escrever_opt0 <dados_msb> <dados_lsb>
 ```
 
 **Exemplo:**
-```
+```powershell
 python tremo_loader.py escrever_opt0 11223344 55667788
 ```
 Escreve os bytes `1122334455667788` na área OPT0.
@@ -307,12 +309,12 @@ Escreve os bytes `1122334455667788` na área OPT0.
 Lê os dados da área OPT0 da flash.
 
 **Formato:**
-```
+```text
 ler_opt0
 ```
 
 **Exemplo:**
-```
+```powershell
 python tremo_loader.py ler_opt0
 ```
 Lê os dados da área OPT0.
@@ -326,12 +328,12 @@ A área OPT1 (Option Bytes 1) é uma seção especial da memória flash do micro
 Essas opções podem incluir configurações de proteção de memória, modos de boot, e outras funcionalidades que afetam o comportamento do microcontrolador.
 
 **Formato:**
-```
+```text
 escrever_opt1 <dados_msb> <dados_lsb>
 ```
 
 **Exemplo:**
-```
+```powershell
 python tremo_loader.py escrever_opt1 aabbccdd eeff0011
 ```
 Escreve os bytes `aabbccddeeff0011` na área OPT1.
@@ -342,12 +344,12 @@ Escreve os bytes `aabbccddeeff0011` na área OPT1.
 Lê os dados da área OPT1 da flash.
 
 **Formato:**
-```
+```text
 ler_opt1
 ```
 
 **Exemplo:**
-```
+```powershell
 python tremo_loader.py ler_opt1
 ```
 Lê os dados da área OPT1.
@@ -359,12 +361,12 @@ Exemplo de saída: `aabbccddeeff0011`
 Reinicia o dispositivo.
 
 **Formato:**
-```
+```text
 reset
 ```
 
 **Exemplo:**
-```
+```powershell
 python tremo_loader.py reset
 ```
 Reinicia o dispositivo conectado.
@@ -377,12 +379,12 @@ O número de série é um identificador único atribuído a cada microcontrolado
 Ele é usado para identificar individualmente cada dispositivo, permitindo rastreamento, autenticação e controle de qualidade.
 
 **Formato:**
-```
+```text
 serial
 ```
 
 **Exemplo:**
-```
+```powershell
 python tremo_loader.py serial
 ```
 Retorna o número de serial do dispositivo com 16 bytes.
@@ -395,12 +397,12 @@ Escreve um valor em um registrador do microcontrolador, no endereço especificad
 Ele altera diretamente o conteúdo desse registrador, permitindo modificar configurações ou estados do hardware.
 
 **Formato:**
-```
+```text
 escrever_reg <endereço_do_registrador> <valor_em_hex>
 ```
 
 **Exemplo:**
-```
+```powershell
 python tremo_loader.py escrever_reg 0x40021000 0x01
 ```
 Escreve o valor `0x01` no registrador no endereço 0x40021000.
@@ -412,12 +414,12 @@ Lê o valor de um registrador do microcontrolador no endereço especificado.
 Ele retorna o valor atual armazenado nesse registrador, permitindo verificar configurações ou estados internos do hardware.
 
 **Formato:**
-```
+```text
 ler_reg <endereço_do_registrador>
 ```
 
 **Exemplo:**
-```
+```powershell
 python tremo_loader.py ler_reg 0x40021000
 ```
 Lê o valor do registrador no endereço 0x40021000.
@@ -430,12 +432,12 @@ Lê a versão do bootloader.
 A versão do bootloader é alterada atualizando (regravando) o firmware do bootloader na memória do microcontrolador em uma área específica reservada para ele.
 
 **Formato:**
-```
+```text
 versao_bootloader
 ```
 
 **Exemplo:**
-```
+```powershell
 python tremo_loader.py versao_bootloader
 ```
 Retorna o `version number` bruto do comando `VERSION`.
@@ -452,12 +454,12 @@ Os valores acima são apenas ilustrativos; o conteúdo real depende do que o boo
 Apaga toda a memória EEPROM do microcontrolador.
 
 **Formato:**
-```
+```text
 clear_eeprom
 ```
 
 **Exemplo:**
-```
+```powershell
 python tremo_loader.py clear_eeprom
 ```
 Apaga toda a memória EEPROM do microcontrolador.
@@ -470,15 +472,208 @@ Gera um pacote OTA com header de 16 bytes e concatena com o firmware `.bin`.
 Use esse arquivo para gravação na flash externa a partir do endereço `0x00000000`.
 
 **Formato:**
-```
+```text
 ota_pack <arquivo_firmware.bin> [arquivo_saida.bin]
 ```
 
 **Exemplo:**
-```
+```powershell
 python tremo_loader.py ota_pack app.bin app_ota.bin
 ```
 Se `arquivo_saida.bin` não for informado, o nome padrão será `<arquivo_firmware>_ota.bin`.
+
+---
+
+### ota_assinado
+Gera um pacote OTA assinado com header OTA, trailer de autenticação e validação local do resultado.
+Use esse arquivo para gravação na flash externa a partir do endereço `0x00000000`.
+
+**Formato:**
+```text
+ota_assinado <arquivo_firmware.bin> [arquivo_saida.bin] [--firmware-version <versao>] [--key-header <boot_security_config.h>]
+```
+
+**Exemplo:**
+```powershell
+python tremo_loader.py ota_assinado app.bin app_assinado.bin --firmware-version 7 --key-header C:\projeto\boot_security_config.h
+```
+Se `arquivo_saida.bin` não for informado, o nome padrão será `<arquivo_firmware>_ota_assinado.bin`.
+Se `--key-header` não for informado, a ferramenta tenta localizar o `boot_security_config.h` no caminho padrão; caso ele não exista no ambiente atual, informe o caminho explicitamente.
+
+#### O que o firmware/bootloader precisa implementar
+
+Para que o `ota_assinado` funcione no bootloader do firmware, o bootloader precisa saber ler o pacote OTA da flash externa, validar integridade e autenticação, e só então aceitar a imagem.
+
+O formato gerado pela ferramenta é:
+
+```text
++-------------------------------+
+| Header OTA (16 bytes)         |
++-------------------------------+
+| Firmware bruto (N bytes)      |
++-------------------------------+
+| Trailer de autenticacao       |
+| (36 bytes)                    |
++-------------------------------+
+```
+
+#### Header OTA (16 bytes)
+
+Todos os campos são `little-endian`.
+
+```text
+Offset  Tamanho  Campo
+0x00    4        magic      = 0xB00710AD
+0x04    4        size       = tamanho do firmware em bytes
+0x08    4        crc32      = CRC32 IEEE do firmware bruto
+0x0C    4        reserved   = 0x00000000
+```
+
+#### Trailer de autenticação (36 bytes)
+
+Também em `little-endian`:
+
+```text
+Offset relativo ao trailer  Tamanho  Campo
+0x00                        4        trailer_magic   = 0x41545548
+0x04                        4        trailer_version = 1
+0x08                        4        flags           = 1   (SipHash-128)
+0x0C                        4        firmware_version
+0x10                        16       auth_tag
+0x20                        4        trailer_crc32   = CRC32 dos 32 bytes anteriores do trailer
+```
+
+#### Como a `auth_tag` é calculada
+
+O cálculo usado pelo gerador está em `src/ota_assinado.py` e segue esta sequência:
+
+1. calcular o `crc32` do firmware bruto;
+2. montar o prefixo autenticado com 5 palavras de 32 bits:
+
+   ```text
+   [ trailer_version,
+     flags,
+     firmware_version,
+     firmware_size,
+     firmware_crc32 ]
+   ```
+
+3. concatenar `prefixo + firmware`;
+4. calcular `SipHash-128` com a chave de 16 bytes;
+5. gravar o resultado em `auth_tag`.
+
+Em outras palavras:
+
+```text
+auth_tag = SipHash128(prefixo_autenticado || firmware, chave_16_bytes)
+```
+
+#### Chave usada no bootloader
+
+O `ota_assinado` lê a chave do macro `BOOT_SECURITY_KEY_BYTES` dentro de `boot_security_config.h`.
+O bootloader do firmware precisa usar exatamente a mesma chave.
+
+Exemplo esperado pelo empacotador:
+
+```c
+#define BOOT_SECURITY_KEY_BYTES { \
+    0x00U, 0x01U, 0x02U, 0x03U, \
+    0x04U, 0x05U, 0x06U, 0x07U, \
+    0x08U, 0x09U, 0x0AU, 0x0BU, \
+    0x0CU, 0x0DU, 0x0EU, 0x0FU  \
+}
+```
+
+Se a chave do bootloader e a chave usada no empacotamento forem diferentes, a validação vai falhar.
+
+#### Estruturas mínimas no bootloader
+
+Uma implementação equivalente em C pode usar algo nesta linha:
+
+```c
+typedef struct {
+    uint32_t magic;
+    uint32_t size;
+    uint32_t crc32;
+    uint32_t reserved;
+} ota_header_t;
+
+typedef struct {
+    uint32_t trailer_magic;
+    uint32_t trailer_version;
+    uint32_t flags;
+    uint32_t firmware_version;
+    uint8_t  auth_tag[16];
+    uint32_t trailer_crc32;
+} ota_auth_trailer_t;
+```
+
+#### Sequência de validação recomendada no bootloader
+
+Ao encontrar um pacote OTA na flash externa, o bootloader deve:
+
+1. ler e validar o `header`;
+2. verificar se `magic == 0xB00710AD`;
+3. verificar se `size` é compatível com o espaço disponível;
+4. localizar o trailer em `offset = 16 + size`;
+5. validar `trailer_magic == 0x41545548`;
+6. validar `trailer_version == 1`;
+7. validar `flags == 1`;
+8. calcular `CRC32` do firmware e comparar com o `crc32` do header;
+9. calcular `CRC32` dos primeiros 32 bytes do trailer e comparar com `trailer_crc32`;
+10. montar o mesmo prefixo autenticado usado no empacotador;
+11. recalcular a `auth_tag` com a chave embutida no bootloader;
+12. comparar a `auth_tag` calculada com a `auth_tag` recebida no trailer;
+13. somente se tudo passar, aceitar a imagem para upgrade.
+
+#### Fluxo prático sugerido no firmware
+
+Fluxo típico no bootloader:
+
+1. bootloader inicia;
+2. detecta pacote OTA na flash externa em `0x00000000`;
+3. valida header, firmware e trailer;
+4. se a autenticação falhar, aborta o update e mantém o firmware atual;
+5. se a autenticação passar, grava/copia o firmware para a flash de execução;
+6. opcionalmente grava estado de sucesso e limpa a imagem OTA consumida.
+
+#### Observações importantes
+
+- todos os inteiros usados no pacote estão em `little-endian`;
+- o `CRC32` usado aqui é o IEEE (`binascii.crc32` no Python);
+- a autenticação é feita sobre o firmware bruto, não sobre a imagem já gravada na flash interna;
+- o campo `firmware_version` pode ser usado pelo bootloader para política de anti-rollback, se desejar;
+- hoje a ferramenta gera `trailer_version = 1` e `flags = 1`, então o bootloader deve validar exatamente esses valores.
+
+#### Exemplo de fluxo de uso
+
+1. gerar o pacote assinado:
+   ```powershell
+   python tremo_loader.py ota_assinado app.bin app_ota_assinado.bin --firmware-version 7 --key-header C:\projeto\boot_security_config.h
+   ```
+
+2. opcionalmente validar localmente:
+   ```powershell
+   python tremo_loader.py ota_assinado_verify app_ota_assinado.bin --key-header C:\projeto\boot_security_config.h
+   ```
+
+3. gravar `app_ota_asinado.bin` na flash externa a partir de `0x00000000`;
+4. resetar o equipamento para o bootloader do firmware processar a imagem.
+
+---
+
+### ota_assinado_verify
+Verifica um pacote OTA assinado usando o trailer de autenticação e a chave configurada.
+
+**Formato:**
+```text
+ota_assinado_verify <arquivo_ota_assinado.bin> [--key-header <boot_security_config.h>]
+```
+
+**Exemplo:**
+```powershell
+python tremo_loader.py ota_assinado_verify app_ota_assinado.bin --key-header C:\projeto\boot_security_config.h
+```
 
 ---
 
@@ -486,12 +681,12 @@ Se `arquivo_saida.bin` não for informado, o nome padrão será `<arquivo_firmwa
 Mostra a ajuda com todos os comandos e opções.
 
 **Formato:**
-```
+```text
 help
 ```
 
 **Exemplo:**
-```
+```powershell
 python tremo_loader.py help
 ```
 Mostra a ajuda com todos os comandos e opções.
@@ -506,7 +701,7 @@ Mostra a ajuda com todos os comandos e opções.
 ---
 
 ## Exemplo de flash.bat
-```
+```bat
 .\tremo_loader.exe ^
 -v ^
 flash 0x08000000 .\abnt-620-debug-1.bin

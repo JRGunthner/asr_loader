@@ -1,7 +1,9 @@
 import binascii
 import os
+import pathlib
 import struct
 from .constantes import EEPROM_ENDERECO_ASR6601CB, EEPROM_ENDERECO_ASR6601SE, EEPROM_SIZE, OTA_MAGIC
+from .ota_assinado import build_ota_assinado_package, crc32_ieee, default_key_header, parse_key_from_header, ota_assinado_verify_package
 from .utils import get_crc32
 
 
@@ -222,3 +224,57 @@ def tremo_ota_pack(param):
     print('CRC32    : 0x%08X' % fw_crc)
     print('Saida    : %s  (%d bytes no total)' % (out_path, len(header) + fw_size))
     print('Grave o arquivo de saida a partir do endereco 0x00000000 da flash externa.')
+
+
+def tremo_ota_assinado(param):
+    fw_path = param.firmware
+    if not os.path.isfile(fw_path):
+        raise Exception('ERROR: arquivo nao encontrado: %s' % fw_path)
+
+    if param.output is None:
+        base, ext = os.path.splitext(fw_path)
+        out_path = '%s_ota_assinado%s' % (base, ext)
+    else:
+        out_path = param.output
+
+    key_header = pathlib.Path(param.key_header).resolve() if param.key_header is not None else default_key_header().resolve()
+    key = parse_key_from_header(key_header)
+
+    with open(fw_path, 'rb') as arquivo:
+        fw_data = arquivo.read()
+
+    package = build_ota_assinado_package(fw_data, param.firmware_version, key)
+
+    with open(out_path, 'wb') as arquivo:
+        arquivo.write(package)
+
+    _size, _version, auth_tag = ota_assinado_verify_package(package, key)
+
+    print('Firmware : %s' % fw_path)
+    print('Tamanho  : %d bytes (0x%X)' % (len(fw_data), len(fw_data)))
+    print('CRC32    : 0x%08X' % crc32_ieee(fw_data))
+    print('Versao   : %d' % param.firmware_version)
+    print('AuthTag  : %s' % auth_tag.hex())
+    print('Chave    : %s' % key_header)
+    print('Saida    : %s  (%d bytes no total)' % (out_path, len(package)))
+    print('Grave o arquivo de saida a partir do endereco 0x00000000 da flash externa.')
+
+
+def tremo_ota_assinado_verify(param):
+    package_path = param.input
+    if not os.path.isfile(package_path):
+        raise Exception('ERROR: arquivo nao encontrado: %s' % package_path)
+
+    key_header = pathlib.Path(param.key_header).resolve() if param.key_header is not None else default_key_header().resolve()
+    key = parse_key_from_header(key_header)
+
+    with open(package_path, 'rb') as arquivo:
+        package = arquivo.read()
+
+    size, version, auth_tag = ota_assinado_verify_package(package, key)
+
+    print('Pacote   : %s' % package_path)
+    print('Firmware : %d bytes (0x%X)' % (size, size))
+    print('Versao   : %d' % version)
+    print('AuthTag  : %s' % auth_tag.hex())
+    print('Chave    : %s' % key_header)
