@@ -1,7 +1,10 @@
 import argparse
 import binascii
 import struct
+import sys
+from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from .comandos import (
     tremo_clean_eeprom,
     tremo_erase,
@@ -116,11 +119,23 @@ def cli_printar_help(help_parser):
             print(" ", porta)
 
 
+def cli_obter_data_build():
+    if getattr(sys, 'frozen', False):
+        caminho_build = Path(sys.executable)
+    else:
+        caminho_build = Path(__file__).resolve().parents[1] / 'tremo_loader.py'
+        if not caminho_build.exists():
+            caminho_build = Path(__file__).resolve()
+
+    return caminho_build.stat().st_mtime_ns // 1_000_000_000, caminho_build
+
+
 def cli_adicionar_argumentos(argumentos):
     argumentos.add_argument(Opcoes.PORT.long, Opcoes.PORT.short, help=Opcoes.PORT.texto)
     argumentos.add_argument(Opcoes.BAUD.long, Opcoes.BAUD.short, help=Opcoes.BAUD.texto, type=int, default=BAUD_DEFAULT)
     argumentos.add_argument(Opcoes.VERBOSE.long, Opcoes.VERBOSE.short, help=Opcoes.VERBOSE.texto, action='store_true')
-    argumentos.add_argument(Opcoes.TIMEOUT.long, Opcoes.TIMEOUT.short, help=Opcoes.TIMEOUT.texto, type=int, default=TIMEOUT_DEFAULT)
+    argumentos.add_argument(Opcoes.TIMEOUT.long, Opcoes.TIMEOUT.short, help=Opcoes.TIMEOUT.texto, type=int,
+                            default=TIMEOUT_DEFAULT)
     argumentos.add_argument(Opcoes.EEPROM.long, Opcoes.EEPROM.short, help=Opcoes.EEPROM.texto, action='store_true')
 
 
@@ -172,7 +187,8 @@ def cli_build_parser():
     parser_ler_reg = subparsers.add_parser(Comandos.LER_REG.value, help='ler o conteudo de um registrador')
     parser_ler_reg.add_argument(Argumentos.ADDRESS.value, help='endereco do registrador a ser lido', type=arg_int)
 
-    parser_ler_mem = subparsers.add_parser(Comandos.LER_MEM.value, help='ler uma regiao de memoria em palavras de 32 bits')
+    parser_ler_mem = subparsers.add_parser(Comandos.LER_MEM.value,
+                                           help='ler uma regiao de memoria em palavras de 32 bits')
     parser_ler_mem.add_argument(Argumentos.ADDRESS.value, help='endereco inicial da memoria a ser lida', type=arg_int)
     parser_ler_mem.add_argument(Argumentos.SIZE.value, help='quantidade de bytes a serem lidos', type=arg_int)
     parser_ler_mem.add_argument(Argumentos.OUTPUT.value, nargs='?', help='arquivo opcional para salvar o dump bruto')
@@ -212,7 +228,7 @@ def cli_build_parser():
                                             help='header C com BOOT_SECURITY_KEY_BYTES')
 
     subparsers.add_parser(Comandos.HELP.value, help='mostra essa mensagem de ajuda e sai')
-    subparsers.add_parser(Comandos.VERSAO.value, help='mostra a versao do tremo_loader')
+    subparsers.add_parser(Comandos.VERSAO.value, help='mostra a versao do ASR Loader HD')
 
     return parser
 
@@ -226,7 +242,12 @@ def main(argv=None):
             cli_printar_help(parser)
             return
         if args.command == Comandos.VERSAO.value:
-            print("Tremo Loader v%s" % VERSAO_GRAVADOR)
+            timestamp, caminho_build = cli_obter_data_build()
+            data_build = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+            print('ASR_Loader_HD v%s' % VERSAO_GRAVADOR)
+            print('%s' % data_build)
+            if args.verbose:
+                print('Build source: %s' % caminho_build)
             return
         if args.command == Comandos.OTA_PACK.value:
             tremo_ota_pack(args)
