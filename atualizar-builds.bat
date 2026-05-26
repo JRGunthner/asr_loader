@@ -27,6 +27,7 @@ set "SCRIPT_DIR=%~dp0"
 set "DIST_DIR=%SCRIPT_DIR%dist"
 set "SOURCE_EXE="
 set "SOURCE_MANUAL=%SCRIPT_DIR%README.md"
+set "RENDERED_MANUAL=%TEMP%\MANUAL_tremo_loader_%RANDOM%%RANDOM%.md"
 
 if not exist "%DIST_DIR%\" (
 	echo ERRO: pasta dist nao encontrada em "%DIST_DIR%"
@@ -50,6 +51,18 @@ exit /b 1
 echo Build encontrado: "%SOURCE_EXE%"
 echo.
 
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+	"$exe = Get-Item -LiteralPath '%SOURCE_EXE%';" ^
+	"$readme = Get-Content -LiteralPath '%SOURCE_MANUAL%' -Raw -Encoding UTF8;" ^
+	"$version = if ($exe.BaseName -match 'tremo-loader-v(.+)$') { $Matches[1] } else { $exe.BaseName };" ^
+	"$buildDate = $exe.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss');" ^
+	"$manual = $readme.Replace('{{BUILD_VERSION}}', $version).Replace('{{BUILD_DATE}}', $buildDate);" ^
+	"Set-Content -LiteralPath '%RENDERED_MANUAL%' -Value $manual -Encoding Default"
+if errorlevel 1 (
+  echo ERRO: falha ao gerar MANUAL_tremo_loader.md a partir do README.md
+  exit /b 1
+)
+
 call :copy_to "D:\projetos\pr439v1-postyou-dlms\tools"
 if errorlevel 1 exit /b 1
 call :copy_to "D:\projetos\pr439v2-postyou-dlms\tools"
@@ -59,6 +72,7 @@ if errorlevel 1 exit /b 1
 
 echo.
 echo Atualizacao concluida.
+if exist "%RENDERED_MANUAL%" del /q "%RENDERED_MANUAL%" >nul 2>nul
 exit /b 0
 
 :copy_to
@@ -75,7 +89,7 @@ if errorlevel 1 (
 	exit /b 1
 )
 
-copy /Y "%SOURCE_MANUAL%" "%TARGET_DIR%\MANUAL_tremo_loader.md" >nul
+copy /Y "%RENDERED_MANUAL%" "%TARGET_DIR%\MANUAL_tremo_loader.md" >nul
 if errorlevel 1 (
 	echo ERRO: falha ao copiar para "%TARGET_DIR%\MANUAL_tremo_loader.md"
 	exit /b 1

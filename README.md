@@ -1,4 +1,6 @@
-# tremo_loader.py
+# ASR Loader HD
+`ASR_Loader_HD: v{{BUILD_VERSION}}`
+`{{BUILD_DATE}}`
 
 Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
 
