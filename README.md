@@ -20,27 +20,29 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
   - [Manter EEPROM: -e ou --eeprom](#manter-eeprom--e-ou---eeprom)
   - [Help: -h ou --help](#help--h-ou---help)
 - [Comandos](#comandos)
-  - [jump](#jump)
-  - [flash](#flash)
+  - [make](#make)
   - [erase](#erase)
+  - [flash](#flash)
   - [verify](#verify)
-  - [escrever_otp](#escrever_otp)
-  - [ler_otp](#ler_otp)
-  - [escrever_opt0](#escrever_opt0)
-  - [ler_opt0](#ler_opt0)
-  - [escrever_opt1](#escrever_opt1)
-  - [ler_opt1](#ler_opt1)
   - [reset](#reset)
-  - [serial](#serial)
-  - [escrever_reg](#escrever_reg)
-  - [ler_reg](#ler_reg)
-  - [versao_bootloader](#versao_bootloader)
   - [clear_eeprom](#clear_eeprom)
+  - [serial](#serial)
   - [ota_pack](#ota_pack)
   - [ota_pack_verify](#ota_pack_verify)
   - [ota_assinado](#ota_assinado)
   - [ota_assinado_verify](#ota_assinado_verify)
+  - [jump](#jump)
+  - [versao_bootloader](#versao_bootloader)
+  - [ler_otp](#ler_otp)
+  - [escrever_otp](#escrever_otp)
+  - [ler_opt0](#ler_opt0)
+  - [escrever_opt0](#escrever_opt0)
+  - [ler_opt1](#ler_opt1)
+  - [escrever_opt1](#escrever_opt1)
+  - [ler_reg](#ler_reg)
+  - [escrever_reg](#escrever_reg)
   - [help](#help)
+  - [versao](#versao)
 - [Observações](#observações)
 - [Exemplo de flash.bat](#exemplo-de-flashbat)
 
@@ -194,39 +196,22 @@ make -h
 ---
 
 ## Comandos
-
-### jump
-Executa um jump para um endereço específico.
-Faz o microcontrolador executar um salto (jump) para o endereço especificado, transferindo a execução do código para esse local na memória.
-Isso é usado, por exemplo, para iniciar a execução de um novo firmware já gravado na flash.
-
+### make
+O comando `make` é um atalho para executar o script com os parâmetros globais de forma mais simples. Ele é especialmente útil para quem está acostumado a usar o `make` em projetos de firmware e deseja uma sintaxe mais concisa para os comandos de gravação e debug.
 **Formato:**
 ```text
-jump <endereço_de_jump>
+make <comando> [opções] [argumentos]
 ```
-
 **Exemplo:**
 ```powershell
-python tremo_loader.py jump 0x08000123
+make flash 0x08000000 app.bin
 ```
-Faz um jump para o endereço 0x08000123.
-Este comando não retorna nada.
-
----
-
-### flash
-Apaga e grava arquivos na flash.
-
-**Formato:**
-```text
-flash <endereço_inicial> <arquivo.bin>
-```
-
-**Exemplo:**
+Este comando é equivalente a:
 ```powershell
 python tremo_loader.py flash 0x08000000 app.bin
 ```
-Grava o arquivo `app.bin` no endereço 0x08000000.
+O `make` é apenas um atalho e não tem funcionalidades adicionais além de simplificar a execução dos comandos do `tremo_loader.py` com os parâmetros globais.
+Quando você usa `make`, ele automaticamente passa os parâmetros globais configurados para o comando que você deseja executar, tornando a linha de comando mais limpa e fácil de usar.
 
 ---
 
@@ -243,6 +228,22 @@ erase <endereço_inicial> <tamanho_em_bytes>
 python tremo_loader.py erase 0x08000000 4096
 ```
 Apaga 4096 bytes a partir do endereço 0x08000000.
+
+---
+
+### flash
+Apaga e grava arquivos na flash.
+
+**Formato:**
+```text
+flash <endereço_inicial> <arquivo.bin>
+```
+
+**Exemplo:**
+```powershell
+python tremo_loader.py flash 0x08000000 app.bin
+```
+Grava o arquivo `app.bin` no endereço 0x08000000.
 
 ---
 
@@ -264,111 +265,6 @@ ou "ERROR: flash diferente do arquivo" se houver diferença.
 
 ---
 
-### escrever_otp
-Escreve dados na área OTP da flash.
-OTP (One-Time Programmable) é uma área especial da memória flash do microcontrolador que pode ser gravada apenas uma vez.
-Após a escrita, os dados não podem ser alterados ou apagados, garantindo que informações críticas (como configurações, chaves ou identificadores) fiquem permanentemente armazenadas.
-A faixa reservada para OTP é de 0x10001C00 a 0x10001FFF.
-
-**Formato:**
-```text
-escrever_otp <endereço_inicial> <dados_em_hex>
-```
-
-**Exemplo:**
-```powershell
-python tremo_loader.py escrever_otp 0x1FFF7000 aabbccdd
-```
-Escreve os bytes `aabbccdd` no endereço 0x1FFF7000.
-
----
-
-### ler_otp
-Lê dados da área OTP da flash.
-
-**Formato:**
-```text
-ler_otp <endereço_inicial> <tamanho_em_bytes>
-```
-
-**Exemplo:**
-```powershell
-python tremo_loader.py ler_otp 0x1FFF7000 16
-```
-Lê 16 bytes a partir do endereço 0x1FFF7000.
-
----
-
-### escrever_opt0
-Escreve dados na área OPT0 da flash.
-A área OPT0 (Option Bytes 0) é uma seção especial da memória flash do microcontrolador usada para armazenar configurações de sistema e opções de operação.
-Essas opções podem incluir configurações de proteção de memória, modos de boot, e outras funcionalidades que afetam o comportamento do microcontrolador.
-
-**Formato:**
-```text
-escrever_opt0 <dados_msb> <dados_lsb>
-```
-
-**Exemplo:**
-```powershell
-python tremo_loader.py escrever_opt0 11223344 55667788
-```
-Escreve os bytes `1122334455667788` na área OPT0.
-
----
-
-### ler_opt0
-Lê os dados da área OPT0 da flash.
-
-**Formato:**
-```text
-ler_opt0
-```
-
-**Exemplo:**
-```powershell
-python tremo_loader.py ler_opt0
-```
-Lê os dados da área OPT0.
-Exemplo de saída: `1122334455667788`
-
----
-
-### escrever_opt1
-Escreve dados na área OPT1 da flash.
-A área OPT1 (Option Bytes 1) é uma seção especial da memória flash do microcontrolador usada para armazenar configurações adicionais de sistema e opções de operação.
-Essas opções podem incluir configurações de proteção de memória, modos de boot, e outras funcionalidades que afetam o comportamento do microcontrolador.
-
-**Formato:**
-```text
-escrever_opt1 <dados_msb> <dados_lsb>
-```
-
-**Exemplo:**
-```powershell
-python tremo_loader.py escrever_opt1 aabbccdd eeff0011
-```
-Escreve os bytes `aabbccddeeff0011` na área OPT1.
-
----
-
-### ler_opt1
-Lê os dados da área OPT1 da flash.
-
-**Formato:**
-```text
-ler_opt1
-```
-
-**Exemplo:**
-```powershell
-python tremo_loader.py ler_opt1
-```
-Lê os dados da área OPT1.
-Exemplo de saída: `aabbccddeeff0011`
-
----
-
 ### reset
 Reinicia o dispositivo.
 
@@ -382,6 +278,23 @@ reset
 python tremo_loader.py reset
 ```
 Reinicia o dispositivo conectado.
+
+---
+
+### clear_eeprom
+Apaga toda a memória EEPROM do microcontrolador.
+
+**Formato:**
+```text
+clear_eeprom
+```
+
+**Exemplo:**
+```powershell
+python tremo_loader.py clear_eeprom
+```
+Apaga toda a memória EEPROM do microcontrolador.
+Exemplo de saída: `EEPROM apagada com sucesso!`
 
 ---
 
@@ -404,81 +317,6 @@ Exemplo de saída: `0123456789abcdef`
 
 ---
 
-### escrever_reg
-Escreve um valor em um registrador do microcontrolador, no endereço especificado.
-Ele altera diretamente o conteúdo desse registrador, permitindo modificar configurações ou estados do hardware.
-
-**Formato:**
-```text
-escrever_reg <endereço_do_registrador> <valor_em_hex>
-```
-
-**Exemplo:**
-```powershell
-python tremo_loader.py escrever_reg 0x40021000 0x01
-```
-Escreve o valor `0x01` no registrador no endereço 0x40021000.
-
----
-
-### ler_reg
-Lê o valor de um registrador do microcontrolador no endereço especificado.
-Ele retorna o valor atual armazenado nesse registrador, permitindo verificar configurações ou estados internos do hardware.
-
-**Formato:**
-```text
-ler_reg <endereço_do_registrador>
-```
-
-**Exemplo:**
-```powershell
-python tremo_loader.py ler_reg 0x40021000
-```
-Lê o valor do registrador no endereço 0x40021000.
-Exemplo de saída: `0x00000001`
-
----
-
-### versao_bootloader
-Lê a versão do bootloader.
-A versão do bootloader é alterada atualizando (regravando) o firmware do bootloader na memória do microcontrolador em uma área específica reservada para ele.
-
-**Formato:**
-```text
-versao_bootloader
-```
-
-**Exemplo:**
-```powershell
-python tremo_loader.py versao_bootloader
-```
-Retorna o `version number` bruto do comando `VERSION`.
-Exemplo de formato da saída:
-```text
-VERSION retornado pelo bootloader (valor bruto): 0x00000000 (0)
-Bytes retornados (little-endian): 00 00 00 00
-```
-Os valores acima são apenas ilustrativos; o conteúdo real depende do que o bootloader interno responder no dispositivo.
-
----
-
-### clear_eeprom
-Apaga toda a memória EEPROM do microcontrolador.
-
-**Formato:**
-```text
-clear_eeprom
-```
-
-**Exemplo:**
-```powershell
-python tremo_loader.py clear_eeprom
-```
-Apaga toda a memória EEPROM do microcontrolador.
-Exemplo de saída: `EEPROM apagada com sucesso!`
-
----
-
 ### ota_pack
 Gera um pacote OTA com header de 16 bytes e concatena com o firmware `.bin`.
 Use esse arquivo para gravação na flash externa a partir do endereço `0x00000000`.
@@ -493,6 +331,93 @@ ota_pack <arquivo_firmware.bin> [arquivo_saida.bin]
 python tremo_loader.py ota_pack app.bin app_ota.bin
 ```
 Se `arquivo_saida.bin` não for informado, o nome padrão será `<arquivo_firmware>_ota.bin`.
+
+#### O que o firmware/bootloader precisa implementar
+
+Para que o `ota_pack` funcione no bootloader do firmware, o bootloader precisa ler o pacote OTA da flash externa, validar o header e a integridade do firmware, e só então aceitar a imagem.
+
+O formato gerado pela ferramenta é:
+
+```text
++-------------------------------+
+| Header OTA (16 bytes)         |
++-------------------------------+
+| Firmware bruto (N bytes)      |
++-------------------------------+
+```
+
+#### Header OTA (16 bytes)
+
+Todos os campos são `little-endian`.
+
+```text
+Offset  Tamanho  Campo
+0x00    4        magic      = 0xB00710AD
+0x04    4        size       = tamanho do firmware em bytes
+0x08    4        crc32      = CRC32 IEEE do firmware bruto
+0x0C    4        reserved   = 0x00000000
+```
+
+#### Estruturas mínimas no bootloader
+
+Uma implementação equivalente em C pode usar algo nesta linha:
+
+```c
+typedef struct {
+    uint32_t magic;
+    uint32_t size;
+    uint32_t crc32;
+    uint32_t reserved;
+} ota_header_t;
+```
+
+#### Sequência de validação recomendada no bootloader
+
+Ao encontrar um pacote OTA simples na flash externa, o bootloader deve:
+
+1. ler o `header` nos primeiros 16 bytes;
+2. validar `magic == 0xB00710AD`;
+3. validar `reserved == 0x00000000`;
+4. validar se `size` é compatível com o espaço disponível na flash externa e com o destino na flash interna;
+5. ler os `size` bytes de firmware bruto logo após o header;
+6. calcular o `CRC32` do firmware bruto;
+7. comparar o `CRC32` calculado com o campo `crc32` do header;
+8. somente se tudo passar, aceitar a imagem para gravação/execução.
+
+#### Fluxo prático sugerido no firmware
+
+Fluxo típico no bootloader:
+
+1. bootloader inicia;
+2. detecta pacote OTA na flash externa em `0x00000000`;
+3. lê o `header` e valida `magic`, `size`, `crc32` e `reserved`;
+4. se a validação falhar, aborta o update e mantém o firmware atual;
+5. se a validação passar, grava/copia o firmware para a flash de execução;
+6. opcionalmente grava estado de sucesso e limpa a imagem OTA consumida.
+
+#### Observações importantes
+
+- todos os inteiros usados no pacote estão em `little-endian`;
+- o `CRC32` usado aqui é o IEEE (`binascii.crc32` no Python);
+- o firmware dentro do pacote é bruto, sem trailer de autenticação;
+- diferente do `ota_assinado`, o `ota_pack` fornece apenas verificação de integridade, não autenticação criptográfica.
+
+#### Exemplo de fluxo de uso
+
+1. gerar o pacote OTA simples:
+
+   ```powershell
+   python tremo_loader.py ota_pack app.bin app_ota.bin
+   ```
+
+2. opcionalmente validar localmente:
+
+   ```powershell
+   python tremo_loader.py ota_pack_verify app_ota.bin
+   ```
+
+3. gravar `app_ota.bin` na flash externa a partir de `0x00000000`;
+4. resetar o equipamento para o bootloader do firmware processar a imagem.
 
 ---
 
@@ -705,6 +630,188 @@ python tremo_loader.py ota_assinado_verify app_ota_assinado.bin --key-header C:\
 
 ---
 
+### jump
+Executa um jump para um endereço específico.
+Faz o microcontrolador executar um salto (jump) para o endereço especificado, transferindo a execução do código para esse local na memória.
+Isso é usado, por exemplo, para iniciar a execução de um novo firmware já gravado na flash.
+
+**Formato:**
+```text
+jump <endereço_de_jump>
+```
+
+**Exemplo:**
+```powershell
+python tremo_loader.py jump 0x08000123
+```
+Faz um jump para o endereço 0x08000123.
+Este comando não retorna nada.
+
+---
+
+### versao_bootloader
+Lê a versão do bootloader.
+A versão do bootloader é alterada atualizando (regravando) o firmware do bootloader na memória do microcontrolador em uma área específica reservada para ele.
+
+**Formato:**
+```text
+versao_bootloader
+```
+
+**Exemplo:**
+```powershell
+python tremo_loader.py versao_bootloader
+```
+Retorna o `version number` bruto do comando `VERSION`.
+Exemplo de formato da saída:
+```text
+VERSION retornado pelo bootloader (valor bruto): 0x00000000 (0)
+Bytes retornados (little-endian): 00 00 00 00
+```
+Os valores acima são apenas ilustrativos; o conteúdo real depende do que o bootloader interno responder no dispositivo.
+
+---
+
+### ler_otp
+Lê dados da área OTP da flash.
+
+**Formato:**
+```text
+ler_otp <endereço_inicial> <tamanho_em_bytes>
+```
+
+**Exemplo:**
+```powershell
+python tremo_loader.py ler_otp 0x1FFF7000 16
+```
+Lê 16 bytes a partir do endereço 0x1FFF7000.
+
+---
+
+### escrever_otp
+Escreve dados na área OTP da flash.
+OTP (One-Time Programmable) é uma área especial da memória flash do microcontrolador que pode ser gravada apenas uma vez.
+Após a escrita, os dados não podem ser alterados ou apagados, garantindo que informações críticas (como configurações, chaves ou identificadores) fiquem permanentemente armazenadas.
+A faixa reservada para OTP é de 0x10001C00 a 0x10001FFF.
+
+**Formato:**
+```text
+escrever_otp <endereço_inicial> <dados_em_hex>
+```
+
+**Exemplo:**
+```powershell
+python tremo_loader.py escrever_otp 0x1FFF7000 aabbccdd
+```
+Escreve os bytes `aabbccdd` no endereço 0x1FFF7000.
+
+---
+
+### ler_opt0
+Lê os dados da área OPT0 da flash.
+
+**Formato:**
+```text
+ler_opt0
+```
+
+**Exemplo:**
+```powershell
+python tremo_loader.py ler_opt0
+```
+Lê os dados da área OPT0.
+Exemplo de saída: `1122334455667788`
+
+---
+
+### escrever_opt0
+Escreve dados na área OPT0 da flash.
+A área OPT0 (Option Bytes 0) é uma seção especial da memória flash do microcontrolador usada para armazenar configurações de sistema e opções de operação.
+Essas opções podem incluir configurações de proteção de memória, modos de boot, e outras funcionalidades que afetam o comportamento do microcontrolador.
+
+**Formato:**
+```text
+escrever_opt0 <dados_msb> <dados_lsb>
+```
+
+**Exemplo:**
+```powershell
+python tremo_loader.py escrever_opt0 11223344 55667788
+```
+Escreve os bytes `1122334455667788` na área OPT0.
+
+---
+
+### ler_opt1
+Lê os dados da área OPT1 da flash.
+
+**Formato:**
+```text
+ler_opt1
+```
+
+**Exemplo:**
+```powershell
+python tremo_loader.py ler_opt1
+```
+Lê os dados da área OPT1.
+Exemplo de saída: `aabbccddeeff0011`
+
+---
+
+### escrever_opt1
+Escreve dados na área OPT1 da flash.
+A área OPT1 (Option Bytes 1) é uma seção especial da memória flash do microcontrolador usada para armazenar configurações adicionais de sistema e opções de operação.
+Essas opções podem incluir configurações de proteção de memória, modos de boot, e outras funcionalidades que afetam o comportamento do microcontrolador.
+
+**Formato:**
+```text
+escrever_opt1 <dados_msb> <dados_lsb>
+```
+
+**Exemplo:**
+```powershell
+python tremo_loader.py escrever_opt1 aabbccdd eeff0011
+```
+Escreve os bytes `aabbccddeeff0011` na área OPT1.
+
+---
+
+### ler_reg
+Lê o valor de um registrador do microcontrolador no endereço especificado.
+Ele retorna o valor atual armazenado nesse registrador, permitindo verificar configurações ou estados internos do hardware.
+
+**Formato:**
+```text
+ler_reg <endereço_do_registrador>
+```
+
+**Exemplo:**
+```powershell
+python tremo_loader.py ler_reg 0x40021000
+```
+Lê o valor do registrador no endereço 0x40021000.
+Exemplo de saída: `0x00000001`
+
+---
+
+### escrever_reg
+Escreve um valor em um registrador do microcontrolador, no endereço especificado.
+Ele altera diretamente o conteúdo desse registrador, permitindo modificar configurações ou estados do hardware.
+
+**Formato:**
+```text
+escrever_reg <endereço_do_registrador> <valor_em_hex>
+```
+
+**Exemplo:**
+```powershell
+python tremo_loader.py escrever_reg 0x40021000 0x01
+```
+Escreve o valor `0x01` no registrador no endereço 0x40021000.
+
+---
+
 ### help
 Mostra a ajuda com todos os comandos e opções.
 
@@ -719,6 +826,20 @@ python tremo_loader.py help
 ```
 Mostra a ajuda com todos os comandos e opções.
 
+---
+
+### versao
+Mostra a versão do Tremo Loader HD.
+**Formato:**
+```text
+versao
+```
+**Exemplo:**
+```powershell
+python tremo_loader.py versao
+```
+Mostra a versão do Tremo Loader HD, preenchida automaticamente a partir do `README.md`.
+Exemplo de saída: `ASR_Loader_HD: v1.0 (2024-06-01)`
 ---
 
 ## Observações

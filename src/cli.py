@@ -31,6 +31,7 @@ from .utils import arg_int, get_lista_portas_com
 
 
 class Comandos(str, Enum):
+    MAKE = 'make'
     ERASE = 'erase'
     FLASH = 'flash'
     VERIFY = 'verify'
