@@ -7,9 +7,11 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
 ---
 
 ## Sumário
-- [Instalação](#instalação)
+- [Tremo Loader HD](#tremo-loader-hd)
+  - [Ambiente de desenvolvimento](#ambiente-de-desenvolvimento)
+  - [Criar o novo .exe](#criar-o-novo-exe)
+  - [Substituir o tremo_loader.exe em projetos com ASR:](#substituir-o-tremo_loaderexe-em-projetos-com-asr)
 - [Uso](#uso)
-- [Criar o novo .exe](#criar-o-novo-exe)
 - [Parâmetros globais](#parâmetros-globais)
   - [COM PORT: -p ou --port](#com-port--p-ou---port)
   - [Baudrate: -b ou --baudrate](#baudrate--b-ou---baudrate)
@@ -35,6 +37,7 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
   - [versao_bootloader](#versao_bootloader)
   - [clear_eeprom](#clear_eeprom)
   - [ota_pack](#ota_pack)
+  - [ota_pack_verify](#ota_pack_verify)
   - [ota_assinado](#ota_assinado)
   - [ota_assinado_verify](#ota_assinado_verify)
   - [help](#help)
@@ -43,13 +46,41 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
 
 ---
 
-## Instalação
+## Tremo Loader HD
+O Tremo Loader HD é uma ferramenta de linha de comando para gravação e debug de microcontroladores ASR via porta serial.
+Ele suporta uma variedade de comandos para interagir com o bootloader dos microcontroladores ASR, permitindo operações como gravação de firmware, leitura/escrita de memória, controle de boot e geração de pacotes OTA.
+A ferramenta é projetada para ser fácil de usar, com uma interface de linha de comando intuitiva e opções de configuração flexíveis.
+Ela é especialmente útil para desenvolvedores que trabalham com microcontroladores ASR, oferecendo uma solução eficiente para gerenciamento de firmware e depuração.
 
-Requisitos:
-- Python 3.x
-- Instalar dependências:
+### Ambiente de desenvolvimento
+1. Certifique-se de ter o Python 3.x instalado em seu sistema.
+2. Clone ou baixe este repositório para o seu ambiente local.
+3. Navegue até a pasta do projeto no terminal.
+4. Instale as dependências necessárias usando o comando:
 ```powershell
 pip install -r requirements.txt
+```
+---
+
+### Criar o novo .exe
+```bat
+build.bat
+```
+ou
+```powershell
+pyinstaller --onefile tremo_loader.py
+```
+ou
+```powershell
+py -m PyInstaller --onefile tremo_loader.py
+```
+---
+
+### Substituir o tremo_loader.exe em projetos com ASR:
+Este script realiza um build e copia automaticamente o executável versionado mais recente de `dist\tremo_loader-v*.exe` para as pastas de tools dos projetos com ASR.
+Também gera um arquivo `MANUAL_tremo_loader.md` com a versão e a data do último executável encontrado em `dist`, preenchidas automaticamente a partir do `README.md`.
+```bat
+atualizar-builds.bat
 ```
 ---
 
@@ -66,27 +97,6 @@ ou
 ou
 ```powershell
 make <comando> [opções] [argumentos]
-```
----
-
-## Criar o novo .exe
-```bat
-build.bat
-```
-ou
-```powershell
-pyinstaller --onefile tremo_loader.py
-```
-ou
-```powershell
-py -m PyInstaller --onefile tremo_loader.py
-```
----
-
-## Substituir o tremo_loader.exe em projetos com ASR:
-Este script copia automaticamente o executável versionado mais recente de `dist\tremo_loader-v*.exe` para as pastas de tools dos projetos com ASR.
-```bat
-atualizar-builds.bat
 ```
 ---
 
@@ -483,6 +493,22 @@ ota_pack <arquivo_firmware.bin> [arquivo_saida.bin]
 python tremo_loader.py ota_pack app.bin app_ota.bin
 ```
 Se `arquivo_saida.bin` não for informado, o nome padrão será `<arquivo_firmware>_ota.bin`.
+
+---
+
+### ota_pack_verify
+Verifica um pacote OTA simples com header de 16 bytes e firmware bruto.
+Valida `magic`, `size`, `crc32`, `reserved` e o tamanho total do arquivo.
+
+**Formato:**
+```text
+ota_pack_verify <arquivo_ota.bin>
+```
+
+**Exemplo:**
+```powershell
+python tremo_loader.py ota_pack_verify app_ota.bin
+```
 
 ---
 

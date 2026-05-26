@@ -226,6 +226,41 @@ def tremo_ota_pack(param):
     print('Grave o arquivo de saida a partir do endereco 0x00000000 da flash externa.')
 
 
+def tremo_ota_pack_verify(param):
+    caminho_pacote = param.input
+    if not os.path.isfile(caminho_pacote):
+        raise Exception('ERROR: arquivo nao encontrado: %s' % caminho_pacote)
+
+    with open(caminho_pacote, 'rb') as arquivo:
+        pacote = arquivo.read()
+
+    if len(pacote) < 16:
+        raise Exception('ERROR: pacote OTA muito pequeno')
+
+    magic, fw_size, fw_crc, reservado = struct.unpack_from('<IIII', pacote, 0)
+
+    if magic != OTA_MAGIC:
+        raise Exception('ERROR: magic OTA invalido: 0x%08X' % magic)
+
+    if reservado != 0:
+        raise Exception('ERROR: campo reserved invalido: 0x%08X' % reservado)
+
+    tamanho_esperado = 16 + fw_size
+    if len(pacote) != tamanho_esperado:
+        raise Exception('ERROR: tamanho total invalido: esperado %d, encontrado %d' % (tamanho_esperado, len(pacote)))
+
+    firmware = pacote[16:]
+    crc_calculado = binascii.crc32(firmware) & 0xFFFFFFFF
+    if crc_calculado != fw_crc:
+        raise Exception('ERROR: CRC32 do firmware invalido: esperado 0x%08X, calculado 0x%08X' % (fw_crc, crc_calculado))
+
+    print('Pacote    : %s' % caminho_pacote)
+    print('Magic     : 0x%08X' % magic)
+    print('Tamanho   : %d bytes (0x%X)' % (fw_size, fw_size))
+    print('CRC32     : 0x%08X' % fw_crc)
+    print('Reservado : 0x%08X' % reservado)
+
+
 def tremo_ota_assinado(param):
     fw_path = param.firmware
     if not os.path.isfile(fw_path):
