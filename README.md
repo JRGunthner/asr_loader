@@ -41,6 +41,7 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
   - [escrever_opt1](#escrever_opt1)
   - [ler_reg](#ler_reg)
   - [escrever_reg](#escrever_reg)
+  - [ler_mem](#ler_mem)
   - [help](#help)
   - [versao](#versao)
 - [Observações](#observações)
@@ -809,6 +810,35 @@ escrever_reg <endereço_do_registrador> <valor_em_hex>
 python tremo_loader.py escrever_reg 0x40021000 0x01
 ```
 Escreve o valor `0x01` no registrador no endereço 0x40021000.
+
+---
+
+### ler_mem
+Lê uma região maior de memória do ASR in-circuit usando leituras sequenciais de 32 bits.
+Esse comando é indicado para consultar áreas maiores de SRAM, flash mapeada ou regiões de periféricos quando você já conhece os endereços pelo manual de referência.
+
+**Formato:**
+```text
+ler_mem <endereço_inicial> <tamanho_em_bytes> [arquivo_saida.bin]
+```
+
+**Exemplo:**
+```powershell
+python tremo_loader.py ler_mem 0x20000000 256 dump_sram.bin
+```
+
+O comando:
+
+- faz leituras sucessivas de 32 bits a partir do endereço informado;
+- aceita endereço inicial desalinhado;
+- imprime um hexdump formatado no terminal;
+- opcionalmente salva o dump bruto em arquivo.
+
+**Observações importantes:**
+
+- a leitura usa o mesmo mecanismo interno de `ler_reg`, repetindo acessos de 32 bits;
+- alguns endereços podem não ser legíveis pelo bootloader e podem retornar erro;
+- para regiões muito grandes, prefira informar um arquivo de saída e analisar o dump depois.
 
 ---
 

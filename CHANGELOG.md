@@ -8,6 +8,7 @@
 - Adição do comando `ota_assinado` para gerar pacote OTA assinado com `--firmware-version` e `--key-header`.
 - `atualizar-builds.bat` agora gera `MANUAL_tremo_loader.md` com a versão e a data do último executável encontrado em `dist`, preenchidas automaticamente a partir do `README.md`.
 - Adição do comando `ota_pack_verify` para validar pacotes OTA simples gerados por `ota_pack`.
+- Adição do comando `ler_mem` para consultar regiões maiores de memória do ASR in-circuit via leituras sequenciais de 32 bits.
 
 ## v1.2 - 2025-10-07
 - Estruturação modular da aplicação em `src/`, separando CLI, comandos, protocolo, constantes, utilitários e runtime.

@@ -185,6 +185,49 @@ def tremo_ler_reg(param, processador, config):
     return processador.ler_reg(param.address)
 
 
+def _formatar_hexdump(endereco_inicial, dados):
+    linhas = []
+    for offset in range(0, len(dados), 16):
+        bloco = dados[offset:offset + 16]
+        hex_bytes = ' '.join('%02X' % byte for byte in bloco)
+        hex_bytes = hex_bytes.ljust(16 * 3 - 1)
+        ascii_bytes = ''.join(chr(byte) if 32 <= byte <= 126 else '.' for byte in bloco)
+        linhas.append('%08X  %s  |%s|' % (endereco_inicial + offset, hex_bytes, ascii_bytes))
+    return '\n'.join(linhas)
+
+
+def tremo_ler_mem(param, processador, config):
+    if param.size <= 0:
+        raise Exception('ERROR: o tamanho deve ser maior que zero')
+
+    if not tremo_conectar(processador, config.portas_disponiveis, param.baud):
+        return b''
+
+    endereco_inicial = param.address
+    endereco_alinhado = endereco_inicial & ~0x3
+    deslocamento_inicial = endereco_inicial - endereco_alinhado
+    tamanho_total = deslocamento_inicial + param.size
+    quantidade_palavras = (tamanho_total + 3) // 4
+
+    dados_lidos = bytearray()
+    for indice in range(quantidade_palavras):
+        endereco_atual = endereco_alinhado + (indice * 4)
+        valor = processador.ler_reg(endereco_atual)[0]
+        dados_lidos.extend(struct.pack('<I', valor))
+
+    dados = bytes(dados_lidos[deslocamento_inicial:deslocamento_inicial + param.size])
+
+    print('Leitura de memoria concluida: %d bytes a partir de %s' % (param.size, hex(endereco_inicial)))
+    print(_formatar_hexdump(endereco_inicial, dados))
+
+    if getattr(param, 'output', None):
+        with open(param.output, 'wb') as arquivo:
+            arquivo.write(dados)
+        print('Dump salvo em: %s' % param.output)
+
+    return dados
+
+
 def tremo_escrever_reg(param, processador, config):
     if not tremo_conectar(processador, config.portas_disponiveis, param.baud):
         return

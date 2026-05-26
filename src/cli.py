@@ -13,6 +13,7 @@ from .comandos import (
     tremo_jump,
     tremo_ler_opt0,
     tremo_ler_opt1,
+    tremo_ler_mem,
     tremo_ler_otp,
     tremo_ler_reg,
     tremo_ota_pack,
@@ -59,6 +60,7 @@ class Comandos(str, Enum):
 
     LER_REG = 'ler_reg'
     ESCREVER_REG = 'escrever_reg'
+    LER_MEM = 'ler_mem'
 
     VERSAO = 'versao'
     HELP = 'help'
@@ -169,6 +171,11 @@ def cli_build_parser():
 
     parser_ler_reg = subparsers.add_parser(Comandos.LER_REG.value, help='ler o conteudo de um registrador')
     parser_ler_reg.add_argument(Argumentos.ADDRESS.value, help='endereco do registrador a ser lido', type=arg_int)
+
+    parser_ler_mem = subparsers.add_parser(Comandos.LER_MEM.value, help='ler uma regiao de memoria em palavras de 32 bits')
+    parser_ler_mem.add_argument(Argumentos.ADDRESS.value, help='endereco inicial da memoria a ser lida', type=arg_int)
+    parser_ler_mem.add_argument(Argumentos.SIZE.value, help='quantidade de bytes a serem lidos', type=arg_int)
+    parser_ler_mem.add_argument(Argumentos.OUTPUT.value, nargs='?', help='arquivo opcional para salvar o dump bruto')
 
     parser_escrever_reg = subparsers.add_parser(Comandos.ESCREVER_REG.value, help='escrever em um registrador')
     parser_escrever_reg.add_argument(Argumentos.ADDRESS.value, help='endereco do registrador a ser escrito',
@@ -294,6 +301,8 @@ def main(argv=None):
         elif args.command == Comandos.LER_REG.value:
             valor_reg = tremo_ler_reg(args, tremo, config)
             print('Valor do registrador: 0x%s' % valor_reg[0])
+        elif args.command == Comandos.LER_MEM.value:
+            tremo_ler_mem(args, tremo, config)
         elif args.command == Comandos.VERSAO_BOOTLOADER.value:
             versao = tremo_versao_bootloader(args, tremo, config)
             versao_raw = versao[0]
