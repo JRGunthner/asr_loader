@@ -1,6 +1,6 @@
 @echo off
 echo ===============================================
-echo    TREMO LOADER - BUILD
+echo    ASR LOADER - BUILD
 echo ===============================================
 echo.
 

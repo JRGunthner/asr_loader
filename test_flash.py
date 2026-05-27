@@ -1,5 +1,5 @@
 """
-Arquivo de teste para tremo_loader.py - comando flash
+Arquivo de teste para asr_loader.py - comando flash
 Testa a gravação de firmware no dispositivo ASR6601
 """
 
@@ -9,7 +9,7 @@ import os
 
 def run_flash_command(address, filename, port=None, baud=921600):
     """
-    Executa o comando flash do tremo_loader.py
+    Executa o comando flash do asr_loader.py
 
     Args:
         address: Endereço de memória (ex: "0x08000000")
@@ -29,7 +29,7 @@ def run_flash_command(address, filename, port=None, baud=921600):
     print(f"{'='*60}\n")
 
     # Monta o comando
-    cmd = ["python", "tremo_loader.py"]
+    cmd = ["python", "asr_loader.py"]
 
     if port:
         cmd.extend(["--port", port])
@@ -114,7 +114,7 @@ def test_multiple_files():
     # Exemplo: gravar múltiplos binários
     # Você pode adicionar mais arquivos conforme necessário
     cmd = [
-        "python", "tremo_loader.py",
+        "python", "asr_loader.py",
         "flash",
         "0x08000000", "0x08000000-main.bin"
         # Adicione mais pares endereço/arquivo aqui se necessário
@@ -142,12 +142,12 @@ def check_prerequisites():
     """Verifica se os arquivos necessários existem"""
     print("\n### Verificação de pré-requisitos ###\n")
 
-    # Verifica se tremo_loader.py existe
-    if not os.path.exists("tremo_loader.py"):
-        print("✗ tremo_loader.py não encontrado!")
+    # Verifica se asr_loader.py existe
+    if not os.path.exists("asr_loader.py"):
+        print("✗ asr_loader.py não encontrado!")
         return False
     else:
-        print("✓ tremo_loader.py encontrado")
+        print("✓ asr_loader.py encontrado")
 
     # Verifica se o arquivo binário existe
     if not os.path.exists("0x08000000-main.bin"):
@@ -172,7 +172,7 @@ def check_prerequisites():
 def main():
     """Função principal - executa os testes"""
     print("="*60)
-    print("TESTES DO TREMO_LOADER.PY - COMANDO FLASH")
+    print("TESTES DO ASR_LOADER.PY - COMANDO FLASH")
     print("="*60)
 
     # Verifica pré-requisitos

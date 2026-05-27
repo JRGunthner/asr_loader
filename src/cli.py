@@ -6,30 +6,30 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from .comandos import (
-    tremo_clean_eeprom,
-    tremo_erase,
-    tremo_escrever_opt0,
-    tremo_escrever_opt1,
-    tremo_escrever_otp,
-    tremo_escrever_reg,
-    tremo_flash,
-    tremo_jump,
-    tremo_ler_opt0,
-    tremo_ler_opt1,
-    tremo_ler_mem,
-    tremo_ler_otp,
-    tremo_ler_reg,
-    tremo_ota_pack,
-    tremo_ota_pack_verify,
-    tremo_ota_assinado,
-    tremo_ota_assinado_verify,
-    tremo_serial_asr,
-    tremo_sw_reset,
-    tremo_verify,
-    tremo_versao_bootloader,
+    asr_clean_eeprom,
+    asr_erase,
+    asr_escrever_opt0,
+    asr_escrever_opt1,
+    asr_escrever_otp,
+    asr_escrever_reg,
+    asr_flash,
+    asr_jump,
+    asr_ler_opt0,
+    asr_ler_opt1,
+    asr_ler_mem,
+    asr_ler_otp,
+    asr_ler_reg,
+    asr_ota_pack,
+    asr_ota_pack_verify,
+    asr_ota_assinado,
+    asr_ota_assinado_verify,
+    asr_serial_asr,
+    asr_sw_reset,
+    asr_verify,
+    asr_versao_bootloader,
 )
 from .constantes import BAUD_DEFAULT, TIMEOUT_DEFAULT, VERSAO_GRAVADOR
-from .tremoLoader import TremoLoader
+from .ASRLoader import ASRLoader
 from .runtime import RuntimeConfig
 from .utils import arg_int, get_lista_portas_com
 
@@ -123,7 +123,7 @@ def cli_obter_data_build():
     if getattr(sys, 'frozen', False):
         caminho_build = Path(sys.executable)
     else:
-        caminho_build = Path(__file__).resolve().parents[1] / 'tremo_loader.py'
+        caminho_build = Path(__file__).resolve().parents[1] / 'asr_loader.py'
         if not caminho_build.exists():
             caminho_build = Path(__file__).resolve()
 
@@ -143,7 +143,7 @@ def cli_build_parser():
     parser = argparse.ArgumentParser()
     cli_adicionar_argumentos(parser)
 
-    msg_help = 'run tremo_loader.py {command} -h'
+    msg_help = 'run asr_loader.py {command} -h'
     subparsers = parser.add_subparsers(dest='command', help=msg_help)
 
     parser_erase = subparsers.add_parser(Comandos.ERASE.value, help='apagar determinada area da flash')
@@ -228,7 +228,7 @@ def cli_build_parser():
                                             help='header C com BOOT_SECURITY_KEY_BYTES')
 
     subparsers.add_parser(Comandos.HELP.value, help='mostra essa mensagem de ajuda e sai')
-    subparsers.add_parser(Comandos.VERSAO.value, help='mostra a versao do ASR Loader HD')
+    subparsers.add_parser(Comandos.VERSAO.value, help='mostra a versao do ASR Loader')
 
     return parser
 
@@ -244,25 +244,25 @@ def main(argv=None):
         if args.command == Comandos.VERSAO.value:
             timestamp, caminho_build = cli_obter_data_build()
             data_build = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
-            print('ASR_Loader_HD v%s' % VERSAO_GRAVADOR)
+            print('ASR_Loader v%s' % VERSAO_GRAVADOR)
             print('%s' % data_build)
             if args.verbose:
                 print('Build source: %s' % caminho_build)
             return
         if args.command == Comandos.OTA_PACK.value:
-            tremo_ota_pack(args)
+            asr_ota_pack(args)
             print('Pacote OTA gerado com sucesso')
             return
         if args.command == Comandos.OTA_PACK_VERIFY.value:
-            tremo_ota_pack_verify(args)
+            asr_ota_pack_verify(args)
             print('Pacote OTA verificado com sucesso')
             return
         if args.command == Comandos.OTA_ASSINADO.value:
-            tremo_ota_assinado(args)
+            asr_ota_assinado(args)
             print('Pacote OTA assinado gerado com sucesso')
             return
         if args.command == Comandos.OTA_ASSINADO_VERIFY.value:
-            tremo_ota_assinado_verify(args)
+            asr_ota_assinado_verify(args)
             print('Pacote OTA assinado verificado com sucesso')
             return
 
@@ -277,61 +277,61 @@ def main(argv=None):
         if args.port is None:
             print("Encontrado %d serial ports" % len(config.portas_disponiveis))
 
-        tremo = TremoLoader(config)
+        asr_mcu = ASRLoader(config)
 
         if args.command == Comandos.JUMP.value:
-            tremo_jump(args, tremo, config)
+            asr_jump(args, asr_mcu, config)
             print('Jump executado com sucesso')
         elif args.command == Comandos.FLASH.value:
-            gravado = tremo_flash(args, tremo, config)
+            gravado = asr_flash(args, asr_mcu, config)
             if gravado:
                 print('Gravado com sucesso')
         elif args.command == Comandos.ERASE.value:
-            tremo_erase(args, tremo, config)
+            asr_erase(args, asr_mcu, config)
             print('Apagado com sucesso')
         elif args.command == Comandos.VERIFY.value:
-            tremo_verify(args, tremo, config)
+            asr_verify(args, asr_mcu, config)
             print('Verificacao completa! Flash igual ao arquivo.')
         elif args.command == Comandos.ESCREVER_OTP.value:
-            tremo_escrever_otp(args, tremo, config)
+            asr_escrever_otp(args, asr_mcu, config)
             print('Escrita na OTP com sucesso')
         elif args.command == Comandos.LER_OTP.value:
-            data = tremo_ler_otp(args, tremo, config)
+            data = asr_ler_otp(args, asr_mcu, config)
             print('OTP data: %s' % binascii.hexlify(data))
         elif args.command == Comandos.ESCREVER_OPT0.value:
-            tremo_escrever_opt0(args, tremo, config)
+            asr_escrever_opt0(args, asr_mcu, config)
             print('Escrita na OPT0 com sucesso')
         elif args.command == Comandos.LER_OPT0.value:
-            opt0 = tremo_ler_opt0(args, tremo, config)
+            opt0 = asr_ler_opt0(args, asr_mcu, config)
             print('OPT0 data: %s %s' % (hex(opt0[0]), hex(opt0[1])))
         elif args.command == Comandos.ESCREVER_OPT1.value:
-            tremo_escrever_opt1(args, tremo, config)
+            asr_escrever_opt1(args, asr_mcu, config)
             print('Escrita na OPT1 com sucesso')
         elif args.command == Comandos.LER_OPT1.value:
-            opt1 = tremo_ler_opt1(args, tremo, config)
+            opt1 = asr_ler_opt1(args, asr_mcu, config)
             print('OPT1 data: %s %s' % (hex(opt1[0]), hex(opt1[1])))
         elif args.command == Comandos.RESET.value:
-            tremo_sw_reset(args, tremo, config)
+            asr_sw_reset(args, asr_mcu, config)
             print('Reset via software')
         elif args.command == Comandos.SERIAL.value:
-            sn = tremo_serial_asr(args, tremo, config)
+            sn = asr_serial_asr(args, asr_mcu, config)
             print('Serial: %s' % binascii.hexlify(sn))
         elif args.command == Comandos.ESCREVER_REG.value:
-            tremo_escrever_reg(args, tremo, config)
+            asr_escrever_reg(args, asr_mcu, config)
             print('Registrador escrito com sucesso')
         elif args.command == Comandos.LER_REG.value:
-            valor_reg = tremo_ler_reg(args, tremo, config)
+            valor_reg = asr_ler_reg(args, asr_mcu, config)
             print('Valor do registrador: 0x%s' % valor_reg[0])
         elif args.command == Comandos.LER_MEM.value:
-            tremo_ler_mem(args, tremo, config)
+            asr_ler_mem(args, asr_mcu, config)
         elif args.command == Comandos.VERSAO_BOOTLOADER.value:
-            versao = tremo_versao_bootloader(args, tremo, config)
+            versao = asr_versao_bootloader(args, asr_mcu, config)
             versao_raw = versao[0]
             versao_bytes = ' '.join('%02X' % byte for byte in struct.pack('<I', versao_raw))
             print('VERSION retornado pelo bootloader (valor bruto): 0x%08X (%d)' % (versao_raw, versao_raw))
             print('Bytes retornados: %s' % versao_bytes)
         elif args.command == Comandos.CLEAR_EEPROM.value:
-            tremo_clean_eeprom(args, tremo, config)
+            asr_clean_eeprom(args, asr_mcu, config)
             print('Eeprom emulada apagada com sucesso')
         else:
             cli_printar_help(parser)

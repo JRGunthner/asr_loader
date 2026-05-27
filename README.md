@@ -1,5 +1,5 @@
-# ASR Loader HD
-`ASR_Loader_HD: v{{BUILD_VERSION}}`
+# ASR Loader
+`ASR_Loader: v{{BUILD_VERSION}}`
 `{{BUILD_DATE}}`
 
 Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
@@ -7,10 +7,10 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
 ---
 
 ## Sumário
-- [Tremo Loader HD](#tremo-loader-hd)
+- [ASR Loader](#asr-loader)
   - [Ambiente de desenvolvimento](#ambiente-de-desenvolvimento)
   - [Criar o novo .exe](#criar-o-novo-exe)
-  - [Substituir o tremo_loader.exe em projetos com ASR:](#substituir-o-tremo_loaderexe-em-projetos-com-asr)
+  - [Substituir o asr_loader.exe em projetos com ASR:](#substituir-o-asr_loaderexe-em-projetos-com-asr)
 - [Uso](#uso)
 - [Parâmetros globais](#parâmetros-globais)
   - [COM PORT: -p ou --port](#com-port--p-ou---port)
@@ -49,8 +49,8 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
 
 ---
 
-## Tremo Loader HD
-O Tremo Loader HD é uma ferramenta de linha de comando para gravação e debug de microcontroladores ASR via porta serial.
+## ASR Loader
+O `ASR Loader` é uma ferramenta de linha de comando para gravação e debug de microcontroladores ASR via porta serial.
 Ele suporta uma variedade de comandos para interagir com o bootloader dos microcontroladores ASR, permitindo operações como gravação de firmware, leitura/escrita de memória, controle de boot e geração de pacotes OTA.
 A ferramenta é projetada para ser fácil de usar, com uma interface de linha de comando intuitiva e opções de configuração flexíveis.
 Ela é especialmente útil para desenvolvedores que trabalham com microcontroladores ASR, oferecendo uma solução eficiente para gerenciamento de firmware e depuração.
@@ -71,17 +71,17 @@ build.bat
 ```
 ou
 ```powershell
-pyinstaller --onefile tremo_loader.py
+pyinstaller --onefile asr_loader.py
 ```
 ou
 ```powershell
-py -m PyInstaller --onefile tremo_loader.py
+py -m PyInstaller --onefile asr_loader.py
 ```
 ---
 
-### Substituir o tremo_loader.exe em projetos com ASR:
-Este script realiza um build e copia automaticamente o executável versionado mais recente de `dist\tremo_loader-v*.exe` para as pastas de tools dos projetos com ASR.
-Também gera um arquivo `MANUAL_tremo_loader.md` com a versão e a data do último executável encontrado em `dist`, preenchidas automaticamente a partir do `README.md`.
+### Substituir o asr_loader.exe em projetos com ASR:
+Este script realiza um build e copia automaticamente o executável versionado mais recente de `dist\_loader-v*.exe` para as pastas de tools dos projetos com ASR.
+Também gera um arquivo `MANUAL_asr_loader.md` com a versão e a data do último executável encontrado em `dist`, preenchidas automaticamente a partir do `README.md`.
 ```bat
 atualizar-builds.bat
 ```
@@ -91,11 +91,11 @@ atualizar-builds.bat
 
 Execute o script via terminal:
 ```powershell
-py tremo_loader.py <comando> [opções] [argumentos]
+py asr_loader.py <comando> [opções] [argumentos]
 ```
 ou
 ```powershell
-.\tremo_loader.exe <comando> [opções] [argumentos]
+.\asr_loader.exe <comando> [opções] [argumentos]
 ```
 ou
 ```powershell
@@ -209,9 +209,9 @@ make flash 0x08000000 app.bin
 ```
 Este comando é equivalente a:
 ```powershell
-python tremo_loader.py flash 0x08000000 app.bin
+python asr_loader.py flash 0x08000000 app.bin
 ```
-O `make` é apenas um atalho e não tem funcionalidades adicionais além de simplificar a execução dos comandos do `tremo_loader.py` com os parâmetros globais.
+O `make` é apenas um atalho e não tem funcionalidades adicionais além de simplificar a execução dos comandos do `asr_loader.py` com os parâmetros globais.
 Quando você usa `make`, ele automaticamente passa os parâmetros globais configurados para o comando que você deseja executar, tornando a linha de comando mais limpa e fácil de usar.
 
 ---
@@ -226,7 +226,7 @@ erase <endereço_inicial> <tamanho_em_bytes>
 
 **Exemplo:**
 ```powershell
-python tremo_loader.py erase 0x08000000 4096
+python asr_loader.py erase 0x08000000 4096
 ```
 Apaga 4096 bytes a partir do endereço 0x08000000.
 
@@ -242,7 +242,7 @@ flash <endereço_inicial> <arquivo.bin>
 
 **Exemplo:**
 ```powershell
-python tremo_loader.py flash 0x08000000 app.bin
+python asr_loader.py flash 0x08000000 app.bin
 ```
 Grava o arquivo `app.bin` no endereço 0x08000000.
 
@@ -258,7 +258,7 @@ verify <endereço_inicial> <arquivo.bin>
 
 **Exemplo:**
 ```powershell
-python tremo_loader.py verify 0x08000000 app.bin
+python asr_loader.py verify 0x08000000 app.bin
 ```
 Verifica se o conteúdo da flash a partir de 0x08000000 é igual ao arquivo `app.bin`.
 Retorna "Verificacao completa! Flash igual ao arquivo." se for igual,
@@ -276,7 +276,7 @@ reset
 
 **Exemplo:**
 ```powershell
-python tremo_loader.py reset
+python asr_loader.py reset
 ```
 Reinicia o dispositivo conectado.
 
@@ -292,7 +292,7 @@ clear_eeprom
 
 **Exemplo:**
 ```powershell
-python tremo_loader.py clear_eeprom
+python asr_loader.py clear_eeprom
 ```
 Apaga toda a memória EEPROM do microcontrolador.
 Exemplo de saída: `EEPROM apagada com sucesso!`
@@ -311,7 +311,7 @@ serial
 
 **Exemplo:**
 ```powershell
-python tremo_loader.py serial
+python asr_loader.py serial
 ```
 Retorna o número de serial do dispositivo com 16 bytes.
 Exemplo de saída: `0123456789abcdef`
@@ -329,7 +329,7 @@ ota_pack <arquivo_firmware.bin> [arquivo_saida.bin]
 
 **Exemplo:**
 ```powershell
-python tremo_loader.py ota_pack app.bin app_ota.bin
+python asr_loader.py ota_pack app.bin app_ota.bin
 ```
 Se `arquivo_saida.bin` não for informado, o nome padrão será `<arquivo_firmware>_ota.bin`.
 
@@ -408,13 +408,13 @@ Fluxo típico no bootloader:
 1. gerar o pacote OTA simples:
 
    ```powershell
-   python tremo_loader.py ota_pack app.bin app_ota.bin
+   python asr_loader.py ota_pack app.bin app_ota.bin
    ```
 
 2. opcionalmente validar localmente:
 
    ```powershell
-   python tremo_loader.py ota_pack_verify app_ota.bin
+   python asr_loader.py ota_pack_verify app_ota.bin
    ```
 
 3. gravar `app_ota.bin` na flash externa a partir de `0x00000000`;
@@ -433,7 +433,7 @@ ota_pack_verify <arquivo_ota.bin>
 
 **Exemplo:**
 ```powershell
-python tremo_loader.py ota_pack_verify app_ota.bin
+python asr_loader.py ota_pack_verify app_ota.bin
 ```
 
 ---
@@ -449,7 +449,7 @@ ota_assinado <arquivo_firmware.bin> [arquivo_saida.bin] [--firmware-version <ver
 
 **Exemplo:**
 ```powershell
-python tremo_loader.py ota_assinado app.bin app_assinado.bin --firmware-version 7 --key-header C:\projeto\boot_security_config.h
+python asr_loader.py ota_assinado app.bin app_assinado.bin --firmware-version 7 --key-header C:\projeto\boot_security_config.h
 ```
 Se `arquivo_saida.bin` não for informado, o nome padrão será `<arquivo_firmware>_ota_assinado.bin`.
 Se `--key-header` não for informado, a ferramenta tenta localizar o `boot_security_config.h` no caminho padrão; caso ele não exista no ambiente atual, informe o caminho explicitamente.
@@ -603,12 +603,12 @@ Fluxo típico no bootloader:
 
 1. gerar o pacote assinado:
    ```powershell
-   python tremo_loader.py ota_assinado app.bin app_ota_assinado.bin --firmware-version 7 --key-header C:\projeto\boot_security_config.h
+   python asr_loader.py ota_assinado app.bin app_ota_assinado.bin --firmware-version 7 --key-header C:\projeto\boot_security_config.h
    ```
 
 2. opcionalmente validar localmente:
    ```powershell
-   python tremo_loader.py ota_assinado_verify app_ota_assinado.bin --key-header C:\projeto\boot_security_config.h
+   python asr_loader.py ota_assinado_verify app_ota_assinado.bin --key-header C:\projeto\boot_security_config.h
    ```
 
 3. gravar `app_ota_asinado.bin` na flash externa a partir de `0x00000000`;
@@ -626,7 +626,7 @@ ota_assinado_verify <arquivo_ota_assinado.bin> [--key-header <boot_security_conf
 
 **Exemplo:**
 ```powershell
-python tremo_loader.py ota_assinado_verify app_ota_assinado.bin --key-header C:\projeto\boot_security_config.h
+python asr_loader.py ota_assinado_verify app_ota_assinado.bin --key-header C:\projeto\boot_security_config.h
 ```
 
 ---
@@ -643,7 +643,7 @@ jump <endereço_de_jump>
 
 **Exemplo:**
 ```powershell
-python tremo_loader.py jump 0x08000123
+python asr_loader.py jump 0x08000123
 ```
 Faz um jump para o endereço 0x08000123.
 Este comando não retorna nada.
@@ -661,7 +661,7 @@ versao_bootloader
 
 **Exemplo:**
 ```powershell
-python tremo_loader.py versao_bootloader
+python asr_loader.py versao_bootloader
 ```
 Retorna o `version number` bruto do comando `VERSION`.
 Exemplo de formato da saída:
@@ -683,7 +683,7 @@ ler_otp <endereço_inicial> <tamanho_em_bytes>
 
 **Exemplo:**
 ```powershell
-python tremo_loader.py ler_otp 0x1FFF7000 16
+python asr_loader.py ler_otp 0x1FFF7000 16
 ```
 Lê 16 bytes a partir do endereço 0x1FFF7000.
 
@@ -702,7 +702,7 @@ escrever_otp <endereço_inicial> <dados_em_hex>
 
 **Exemplo:**
 ```powershell
-python tremo_loader.py escrever_otp 0x1FFF7000 aabbccdd
+python asr_loader.py escrever_otp 0x1FFF7000 aabbccdd
 ```
 Escreve os bytes `aabbccdd` no endereço 0x1FFF7000.
 
@@ -718,7 +718,7 @@ ler_opt0
 
 **Exemplo:**
 ```powershell
-python tremo_loader.py ler_opt0
+python asr_loader.py ler_opt0
 ```
 Lê os dados da área OPT0.
 Exemplo de saída: `1122334455667788`
@@ -737,7 +737,7 @@ escrever_opt0 <dados_msb> <dados_lsb>
 
 **Exemplo:**
 ```powershell
-python tremo_loader.py escrever_opt0 11223344 55667788
+python asr_loader.py escrever_opt0 11223344 55667788
 ```
 Escreve os bytes `1122334455667788` na área OPT0.
 
@@ -753,7 +753,7 @@ ler_opt1
 
 **Exemplo:**
 ```powershell
-python tremo_loader.py ler_opt1
+python asr_loader.py ler_opt1
 ```
 Lê os dados da área OPT1.
 Exemplo de saída: `aabbccddeeff0011`
@@ -772,7 +772,7 @@ escrever_opt1 <dados_msb> <dados_lsb>
 
 **Exemplo:**
 ```powershell
-python tremo_loader.py escrever_opt1 aabbccdd eeff0011
+python asr_loader.py escrever_opt1 aabbccdd eeff0011
 ```
 Escreve os bytes `aabbccddeeff0011` na área OPT1.
 
@@ -789,7 +789,7 @@ ler_reg <endereço_do_registrador>
 
 **Exemplo:**
 ```powershell
-python tremo_loader.py ler_reg 0x40021000
+python asr_loader.py ler_reg 0x40021000
 ```
 Lê o valor do registrador no endereço 0x40021000.
 Exemplo de saída: `0x00000001`
@@ -807,7 +807,7 @@ escrever_reg <endereço_do_registrador> <valor_em_hex>
 
 **Exemplo:**
 ```powershell
-python tremo_loader.py escrever_reg 0x40021000 0x01
+python asr_loader.py escrever_reg 0x40021000 0x01
 ```
 Escreve o valor `0x01` no registrador no endereço 0x40021000.
 
@@ -824,7 +824,7 @@ ler_mem <endereço_inicial> <tamanho_em_bytes> [arquivo_saida.bin]
 
 **Exemplo:**
 ```powershell
-python tremo_loader.py ler_mem 0x20000000 256 dump_sram.bin
+python asr_loader.py ler_mem 0x20000000 256 dump_sram.bin
 ```
 
 O comando:
@@ -852,24 +852,24 @@ help
 
 **Exemplo:**
 ```powershell
-python tremo_loader.py help
+python asr_loader.py help
 ```
 Mostra a ajuda com todos os comandos e opções.
 
 ---
 
 ### versao
-Mostra a versão do Tremo Loader HD.
+Mostra a versão do ASR Loader.
 **Formato:**
 ```text
 versao
 ```
 **Exemplo:**
 ```powershell
-python tremo_loader.py versao
+python asr_loader.py versao
 ```
-Mostra a versão do Tremo Loader HD, preenchida automaticamente a partir do `README.md`.
-Exemplo de saída: `ASR_Loader_HD: v1.0 (2024-06-01)`
+Mostra a versão do ASR Loader, preenchida automaticamente a partir do `README.md`.
+Exemplo de saída: `ASR_Loader: v1.0 (2024-06-01)`
 ---
 
 ## Observações
@@ -881,7 +881,7 @@ Exemplo de saída: `ASR_Loader_HD: v1.0 (2024-06-01)`
 
 ## Exemplo de flash.bat
 ```bat
-.\tremo_loader.exe ^
+.\asr_loader.exe ^
 -v ^
 flash 0x08000000 .\abnt-620-debug-1.bin
 pause

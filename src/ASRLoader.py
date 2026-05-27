@@ -28,7 +28,7 @@ from .exceptions import CmdExcessao
 from .serial_port import SerialPort
 
 
-class TremoLoader(object):
+class ASRLoader(object):
     def __init__(self, config):
         self.ser = None
         self.config = config

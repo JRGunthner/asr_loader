@@ -7,7 +7,7 @@ from .ota_assinado import build_ota_assinado_package, crc32_ieee, default_key_he
 from .utils import get_crc32
 
 
-def tremo_conectar(processador, lista_portas, baud):
+def asr_conectar(processador, lista_portas, baud):
     for porta in reversed(lista_portas):
         print("Serial port %s" % porta)
         try:
@@ -20,14 +20,14 @@ def tremo_conectar(processador, lista_portas, baud):
     return False
 
 
-def tremo_erase(param, processador, config):
-    if not tremo_conectar(processador, config.portas_disponiveis, param.baud):
+def asr_erase(param, processador, config):
+    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return
     processador.erase(param.address, param.size)
     processador.sw_reset(0)
 
 
-def apagar_eeprom(processador, mostrar_erros=True):
+def asr_apagar_eeprom(processador, mostrar_erros=True):
     enderecos_eeprom = (
         ("ASR6601CB", EEPROM_ENDERECO_ASR6601CB),
         ("ASR6601SE", EEPROM_ENDERECO_ASR6601SE),
@@ -53,14 +53,14 @@ def apagar_eeprom(processador, mostrar_erros=True):
         print('Dispositivo identificado: %s' % variantes_detectadas[1])
 
 
-def tremo_clean_eeprom(param, processador, config):
-    if not tremo_conectar(processador, config.portas_disponiveis, param.baud):
+def asr_clean_eeprom(param, processador, config):
+    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return
-    apagar_eeprom(processador)
+    asr_apagar_eeprom(processador)
     processador.sw_reset(0)
 
 
-def tremo_flash(param, processador, config):
+def asr_flash(param, processador, config):
     if len(param.addr_file) % 2 != 0:
         raise Exception('ERROR: informe pares <address> <filename>')
 
@@ -76,11 +76,11 @@ def tremo_flash(param, processador, config):
             raise Exception('ERROR: falha na leitura do arquivo: %s' % arquivo)
         arquivos.append((endereco, arquivo))
 
-    if not tremo_conectar(processador, config.portas_disponiveis, param.baud):
+    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return False
 
     if config.apaga_eeprom:
-        apagar_eeprom(processador, mostrar_erros=False)
+        asr_apagar_eeprom(processador, mostrar_erros=False)
 
     for endereco, pacote in arquivos:
         pacote_len = os.path.getsize(pacote)
@@ -114,56 +114,56 @@ def tremo_flash(param, processador, config):
     return True
 
 
-def tremo_escrever_otp(param, processador, config):
-    if not tremo_conectar(processador, config.portas_disponiveis, param.baud):
+def asr_escrever_otp(param, processador, config):
+    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return
     processador.escrever_otp(param.address, binascii.unhexlify(param.data))
 
 
-def tremo_ler_otp(param, processador, config):
-    if not tremo_conectar(processador, config.portas_disponiveis, param.baud):
+def asr_ler_otp(param, processador, config):
+    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return b''
     return processador.ler_otp(param.address, param.size)
 
 
-def tremo_escrever_opt0(param, processador, config):
-    if not tremo_conectar(processador, config.portas_disponiveis, param.baud):
+def asr_escrever_opt0(param, processador, config):
+    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return
     processador.escrever_opt0(param.opt0_l, param.opt0_h)
 
 
-def tremo_ler_opt0(param, processador, config):
-    if not tremo_conectar(processador, config.portas_disponiveis, param.baud):
+def asr_ler_opt0(param, processador, config):
+    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return 0, 0
     return processador.ler_opt0()
 
 
-def tremo_escrever_opt1(param, processador, config):
-    if not tremo_conectar(processador, config.portas_disponiveis, param.baud):
+def asr_escrever_opt1(param, processador, config):
+    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return
     processador.escrever_opt1(param.opt1_l, param.opt1_h)
 
 
-def tremo_ler_opt1(param, processador, config):
-    if not tremo_conectar(processador, config.portas_disponiveis, param.baud):
+def asr_ler_opt1(param, processador, config):
+    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return 0, 0
     return processador.ler_opt1()
 
 
-def tremo_serial_asr(param, processador, config):
-    if not tremo_conectar(processador, config.portas_disponiveis, param.baud):
+def asr_serial_asr(param, processador, config):
+    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return b''
     return processador.serial_asr()
 
 
-def tremo_sw_reset(param, processador, config):
-    if not tremo_conectar(processador, config.portas_disponiveis, param.baud):
+def asr_sw_reset(param, processador, config):
+    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return b''
     return processador.sw_reset(0)
 
 
-def tremo_verify(param, processador, config):
-    if not tremo_conectar(processador, config.portas_disponiveis, param.baud):
+def asr_verify(param, processador, config):
+    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return
 
     image_checksum = get_crc32(param.filename)
@@ -173,19 +173,19 @@ def tremo_verify(param, processador, config):
     processador.verify(param.address, image_size, image_checksum)
 
 
-def tremo_versao_bootloader(param, processador, config):
-    if not tremo_conectar(processador, config.portas_disponiveis, param.baud):
+def asr_versao_bootloader(param, processador, config):
+    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return (0,)
     return processador.versao_bootloader()
 
 
-def tremo_ler_reg(param, processador, config):
-    if not tremo_conectar(processador, config.portas_disponiveis, param.baud):
+def asr_ler_reg(param, processador, config):
+    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return (0,)
     return processador.ler_reg(param.address)
 
 
-def _formatar_hexdump(endereco_inicial, dados):
+def asr_formatar_hexdump(endereco_inicial, dados):
     linhas = []
     for offset in range(0, len(dados), 16):
         bloco = dados[offset:offset + 16]
@@ -196,11 +196,11 @@ def _formatar_hexdump(endereco_inicial, dados):
     return '\n'.join(linhas)
 
 
-def tremo_ler_mem(param, processador, config):
+def asr_ler_mem(param, processador, config):
     if param.size <= 0:
         raise Exception('ERROR: o tamanho deve ser maior que zero')
 
-    if not tremo_conectar(processador, config.portas_disponiveis, param.baud):
+    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return b''
 
     endereco_inicial = param.address
@@ -218,7 +218,7 @@ def tremo_ler_mem(param, processador, config):
     dados = bytes(dados_lidos[deslocamento_inicial:deslocamento_inicial + param.size])
 
     print('Leitura de memoria concluida: %d bytes a partir de %s' % (param.size, hex(endereco_inicial)))
-    print(_formatar_hexdump(endereco_inicial, dados))
+    print(asr_formatar_hexdump(endereco_inicial, dados))
 
     if getattr(param, 'output', None):
         with open(param.output, 'wb') as arquivo:
@@ -228,19 +228,19 @@ def tremo_ler_mem(param, processador, config):
     return dados
 
 
-def tremo_escrever_reg(param, processador, config):
-    if not tremo_conectar(processador, config.portas_disponiveis, param.baud):
+def asr_escrever_reg(param, processador, config):
+    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return
     processador.escrever_reg(param.address, param.value)
 
 
-def tremo_jump(param, processador, config):
-    if not tremo_conectar(processador, config.portas_disponiveis, param.baud):
+def asr_jump(param, processador, config):
+    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return
     processador.jump(param.address)
 
 
-def tremo_ota_pack(param):
+def asr_ota_pack(param):
     fw_path = param.firmware
     if not os.path.isfile(fw_path):
         raise Exception('ERROR: arquivo nao encontrado: %s' % fw_path)
@@ -269,7 +269,7 @@ def tremo_ota_pack(param):
     print('Grave o arquivo de saida a partir do endereco 0x00000000 da flash externa.')
 
 
-def tremo_ota_pack_verify(param):
+def asr_ota_pack_verify(param):
     caminho_pacote = param.input
     if not os.path.isfile(caminho_pacote):
         raise Exception('ERROR: arquivo nao encontrado: %s' % caminho_pacote)
@@ -304,7 +304,7 @@ def tremo_ota_pack_verify(param):
     print('Reservado : 0x%08X' % reservado)
 
 
-def tremo_ota_assinado(param):
+def asr_ota_assinado(param):
     fw_path = param.firmware
     if not os.path.isfile(fw_path):
         raise Exception('ERROR: arquivo nao encontrado: %s' % fw_path)
@@ -338,7 +338,7 @@ def tremo_ota_assinado(param):
     print('Grave o arquivo de saida a partir do endereco 0x00000000 da flash externa.')
 
 
-def tremo_ota_assinado_verify(param):
+def asr_ota_assinado_verify(param):
     package_path = param.input
     if not os.path.isfile(package_path):
         raise Exception('ERROR: arquivo nao encontrado: %s' % package_path)

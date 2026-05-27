@@ -1,6 +1,6 @@
 @echo off
 echo ====================================================
-echo    TREMO LOADER - Atualizar Build Tools
+echo    ASR LOADER - Atualizar Build Tools
 echo    Atualiza os tremos de acordo com os arquivos
 echo    de build mais recentes nas pastas dos firmwares
 echo ====================================================
@@ -27,7 +27,7 @@ set "SCRIPT_DIR=%~dp0"
 set "DIST_DIR=%SCRIPT_DIR%dist"
 set "SOURCE_EXE="
 set "SOURCE_MANUAL=%SCRIPT_DIR%README.md"
-set "RENDERED_MANUAL=%TEMP%\MANUAL_tremo_loader_%RANDOM%%RANDOM%.md"
+set "RENDERED_MANUAL=%TEMP%\MANUAL_asr_loader_%RANDOM%%RANDOM%.md"
 
 if not exist "%DIST_DIR%\" (
 	echo ERRO: pasta dist nao encontrada em "%DIST_DIR%"
@@ -39,12 +39,12 @@ if not exist "%SOURCE_MANUAL%" (
 	exit /b 1
 )
 
-for /f "delims=" %%F in ('dir /b /a:-d /o-d "%DIST_DIR%\tremo-loader-v*.exe" 2^>nul') do (
+for /f "delims=" %%F in ('dir /b /a:-d /o-d "%DIST_DIR%\asr-loader-v*.exe" 2^>nul') do (
 	set "SOURCE_EXE=%DIST_DIR%\%%F"
 	goto :source_found
 )
 
-echo ERRO: nenhum arquivo "tremo-loader-v*.exe" foi encontrado em "%DIST_DIR%"
+echo ERRO: nenhum arquivo "asr-loader-v*.exe" foi encontrado em "%DIST_DIR%"
 exit /b 1
 
 :source_found
@@ -54,12 +54,12 @@ echo.
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
 	"$exe = Get-Item -LiteralPath '%SOURCE_EXE%';" ^
 	"$readme = Get-Content -LiteralPath '%SOURCE_MANUAL%' -Raw -Encoding UTF8;" ^
-	"$version = if ($exe.BaseName -match 'tremo-loader-v(.+)$') { $Matches[1] } else { $exe.BaseName };" ^
+	"$version = if ($exe.BaseName -match 'asr-loader-v(.+)$') { $Matches[1] } else { $exe.BaseName };" ^
 	"$buildDate = $exe.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss');" ^
 	"$manual = $readme.Replace('{{BUILD_VERSION}}', $version).Replace('{{BUILD_DATE}}', $buildDate);" ^
 	"Set-Content -LiteralPath '%RENDERED_MANUAL%' -Value $manual -Encoding Default"
 if errorlevel 1 (
-  echo ERRO: falha ao gerar MANUAL_tremo_loader.md a partir do README.md
+  echo ERRO: falha ao gerar MANUAL_asr_loader.md a partir do README.md
   exit /b 1
 )
 
@@ -83,18 +83,18 @@ if not exist "%TARGET_DIR%\" (
 	goto :eof
 )
 
-copy /Y "%SOURCE_EXE%" "%TARGET_DIR%\tremo_loader.exe" >nul
+copy /Y "%SOURCE_EXE%" "%TARGET_DIR%\asr_loader.exe" >nul
 if errorlevel 1 (
-	echo ERRO: falha ao copiar para "%TARGET_DIR%\tremo_loader.exe"
+	echo ERRO: falha ao copiar para "%TARGET_DIR%\asr_loader.exe"
 	exit /b 1
 )
 
-copy /Y "%RENDERED_MANUAL%" "%TARGET_DIR%\MANUAL_tremo_loader.md" >nul
+copy /Y "%RENDERED_MANUAL%" "%TARGET_DIR%\MANUAL_asr_loader.md" >nul
 if errorlevel 1 (
-	echo ERRO: falha ao copiar para "%TARGET_DIR%\MANUAL_tremo_loader.md"
+	echo ERRO: falha ao copiar para "%TARGET_DIR%\MANUAL_asr_loader.md"
 	exit /b 1
 )
 
-echo Copiado para "%TARGET_DIR%\tremo_loader.exe"
-echo Copiado para "%TARGET_DIR%\MANUAL_tremo_loader.md"
+echo Copiado para "%TARGET_DIR%\asr_loader.exe"
+echo Copiado para "%TARGET_DIR%\MANUAL_asr_loader.md"
 goto :eof

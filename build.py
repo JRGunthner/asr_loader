@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script para compilar o Tremo Loader com PyInstaller
+Script para compilar o ASR Loader com PyInstaller
 Gera o executável com nome versionado automaticamente
 A versao é extraída do código fonte
 Cria uma cópia do executável na pasta teste-build para testes rápidos
@@ -22,7 +22,7 @@ from datetime import datetime
 ### @return Versão extraída ou "100" se não encontrada
 def extrair_versao():
     try:
-        with open('tremo_loader.py', 'r', encoding='utf-8') as f:
+        with open('asr_loader.py', 'r', encoding='utf-8') as f:
             conteudo = f.read()
 
         match = re.search(r'VERSAO_GRAVADOR\s*=\s*["\']([^"\']+)["\']', conteudo)
@@ -32,7 +32,7 @@ def extrair_versao():
             print("⚠️  VERSAO_GRAVADOR não encontrada, usando versão padrão '100'")
             return "100"
     except FileNotFoundError:
-        print("❌ Arquivo tremo_loader.py não encontrado!")
+        print("❌ Arquivo asr_loader.py não encontrado!")
         sys.exit(1)
 
 
@@ -109,7 +109,7 @@ def limpar_build_anterior():
         try:
             for arquivo in os.listdir('dist'):
                 caminho = os.path.join('dist', arquivo)
-                if arquivo.startswith('tremo-loader-'):
+                if arquivo.startswith('asr-loader-'):
                     if remover_pasta_seguro(caminho):
                         print(f"   ✅ Removido: {arquivo}")
         except Exception as excessao:
@@ -131,7 +131,7 @@ def limpar_build_anterior():
 ### @param  versao Versão extraída do código fonte
 ### @return True se o executável foi criado com sucesso, False caso contrário
 def criar_executavel(versao):
-    nome_exe = f'tremo-loader-v{versao}'
+    nome_exe = f'asr-loader-v{versao}'
 
     # Garante que o diretório dist existe
     if not os.path.exists('dist'):
@@ -147,7 +147,7 @@ def criar_executavel(versao):
         '--noconfirm',
         '--distpath', 'dist',
         '--workpath', 'build',
-        'tremo_loader.py'
+        'asr_loader.py'
     ]
 
     print(f"\n🔄 Criando executável {nome_exe}.exe...")
@@ -239,7 +239,7 @@ def criar_executavel(versao):
 ### @param  versao Versão extraída do código fonte
 ### @return True se o executável existe, False caso contrário
 def mostrar_resultado(versao):
-    nome_exe = f'tremo-loader-v{versao}.exe'
+    nome_exe = f'asr-loader-v{versao}.exe'
     caminho_exe = os.path.join('dist', nome_exe)
 
     if os.path.exists(caminho_exe):
@@ -276,12 +276,12 @@ def mostrar_resultado(versao):
 
 ### @brief Função principal
 def main():
-    print("🚀 TREMO LOADER - BUILD AUTOMÁTICO")
+    print("🚀 ASR LOADER - BUILD AUTOMÁTICO")
     print("=" * 50)
 
     # Verifica se estamos no diretório correto
-    if not os.path.exists('tremo_loader.py'):
-        print("❌ Arquivo tremo_loader.py não encontrado!")
+    if not os.path.exists('asr_loader.py'):
+        print("❌ Arquivo asr_loader.py não encontrado!")
         print("   Execute este script no diretório do projeto.")
         input("   Pressione Enter para sair...")
         sys.exit(1)
@@ -303,7 +303,7 @@ def main():
 
     if mostrar_resultado(versao):
         print("\n🎯 Para distribuir:")
-        print(f"   Envie o arquivo: dist/tremo-loader-v{versao}.exe")
+        print(f"   Envie o arquivo: dist/asr-loader-v{versao}.exe")
         print("   É um executável standalone, não precisa instalar nada!")
         print("\n✅ BUILD FINALIZADO COM SUCESSO!")
     else:
