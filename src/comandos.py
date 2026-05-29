@@ -2,9 +2,26 @@ import binascii
 import os
 import pathlib
 import struct
+from typing import TypedDict
 from .constantes import EEPROM_ENDERECO_ASR6601CB, EEPROM_ENDERECO_ASR6601SE, EEPROM_SIZE, OTA_MAGIC
 from .ota_assinado import build_ota_assinado_package, crc32_ieee, default_key_header, parse_key_from_header, ota_assinado_verify_package
 from .utils import get_crc32
+
+
+ASR_APP_FLASH_START = 0x08000000
+ASR_APP_FLASH_END = 0x08040000
+ARM_SRAM_START = 0x20000000
+ARM_SRAM_END = 0x40000000
+
+
+class AsrOtaPackInfo(TypedDict):
+    caminho: str
+    pacote: bytes
+    firmware: bytes
+    magic: int
+    fw_size: int
+    fw_crc: int
+    reservado: int
 
 
 def asr_conectar(processador, lista_portas, baud):
@@ -196,6 +213,65 @@ def asr_formatar_hexdump(endereco_inicial, dados):
     return '\n'.join(linhas)
 
 
+def asr_ota_pack_ler_info(caminho_pacote) -> AsrOtaPackInfo:
+    if not os.path.isfile(caminho_pacote):
+        raise Exception('ERROR: arquivo nao encontrado: %s' % caminho_pacote)
+
+    with open(caminho_pacote, 'rb') as arquivo:
+        pacote = arquivo.read()
+
+    if len(pacote) < 16:
+        raise Exception('ERROR: pacote OTA muito pequeno')
+
+    magic, fw_size, fw_crc, reservado = struct.unpack_from('<IIII', pacote, 0)
+
+    if magic != OTA_MAGIC:
+        raise Exception('ERROR: magic OTA invalido: 0x%08X' % magic)
+
+    if reservado != 0:
+        raise Exception('ERROR: campo reservado invalido: 0x%08X' % reservado)
+
+    tamanho_esperado = 16 + fw_size
+    if len(pacote) != tamanho_esperado:
+        raise Exception('ERROR: tamanho total invalido: esperado %d, encontrado %d' % (tamanho_esperado, len(pacote)))
+
+    firmware = pacote[16:]
+    crc_calculado = binascii.crc32(firmware) & 0xFFFFFFFF
+    if crc_calculado != fw_crc:
+        raise Exception('ERROR: CRC32 do firmware invalido: esperado 0x%08X, calculado 0x%08X' % (fw_crc, crc_calculado))
+
+    return {
+        'caminho': caminho_pacote,
+        'pacote': pacote,
+        'firmware': firmware,
+        'magic': magic,
+        'fw_size': fw_size,
+        'fw_crc': fw_crc,
+        'reservado': reservado,
+    }
+
+
+def asr_endereco_em_faixa_app(endereco):
+    return ASR_APP_FLASH_START <= endereco < ASR_APP_FLASH_END
+
+
+def asr_endereco_em_sram(endereco):
+    return ARM_SRAM_START <= endereco < ARM_SRAM_END
+
+
+def asr_imprimir_analise_vetor(nome, valor):
+    destino = valor & ~0x1
+    thumb_setado = bool(valor & 0x1)
+    print('%s      : 0x%08X' % (nome, valor))
+    print('  Thumb setado : %s' % ('sim' if thumb_setado else 'nao'))
+    print('  Destino      : 0x%08X' % destino)
+    print('  Faixa da app : %s (%s - %s)' % (
+        'sim' if asr_endereco_em_faixa_app(destino) else 'nao',
+        hex(ASR_APP_FLASH_START),
+        hex(ASR_APP_FLASH_END),
+    ))
+
+
 def asr_ler_mem(param, processador, config):
     if param.size <= 0:
         raise Exception('ERROR: o tamanho deve ser maior que zero')
@@ -270,38 +346,52 @@ def asr_ota_pack(param):
 
 
 def asr_ota_pack_verify(param):
-    caminho_pacote = param.input
-    if not os.path.isfile(caminho_pacote):
-        raise Exception('ERROR: arquivo nao encontrado: %s' % caminho_pacote)
+    info = asr_ota_pack_ler_info(param.input)
 
-    with open(caminho_pacote, 'rb') as arquivo:
-        pacote = arquivo.read()
+    print('Pacote    : %s' % info['caminho'])
+    print('Magic     : 0x%08X' % info['magic'])
+    print('Tamanho   : %d bytes (0x%X)' % (info['fw_size'], info['fw_size']))
+    print('CRC32     : 0x%08X' % info['fw_crc'])
+    print('Reservado : 0x%08X' % info['reservado'])
 
-    if len(pacote) < 16:
-        raise Exception('ERROR: pacote OTA muito pequeno')
 
-    magic, fw_size, fw_crc, reservado = struct.unpack_from('<IIII', pacote, 0)
+def asr_ota_pack_inspect(param):
+    info = asr_ota_pack_ler_info(param.input)
+    firmware = info['firmware']
+    vector_table = firmware[:64]
 
-    if magic != OTA_MAGIC:
-        raise Exception('ERROR: magic OTA invalido: 0x%08X' % magic)
+    print('Header OTA:')
+    print('  Pacote    : %s' % info['caminho'])
+    print('  Magic     : 0x%08X' % info['magic'])
+    print('  Tamanho   : %d bytes (0x%X)' % (info['fw_size'], info['fw_size']))
+    print('  CRC32     : 0x%08X' % info['fw_crc'])
+    print('  Reservado : 0x%08X' % info['reservado'])
 
-    if reservado != 0:
-        raise Exception('ERROR: campo reserved invalido: 0x%08X' % reservado)
+    print('\nVector table (primeiros %d bytes):' % len(vector_table))
+    if vector_table:
+        print(asr_formatar_hexdump(ASR_APP_FLASH_START, vector_table))
+    else:
+        print('<firmware vazio>')
 
-    tamanho_esperado = 16 + fw_size
-    if len(pacote) != tamanho_esperado:
-        raise Exception('ERROR: tamanho total invalido: esperado %d, encontrado %d' % (tamanho_esperado, len(pacote)))
+    print('\nAnalise basica estrutural:')
+    print('  Tamanho da vector table analisada : %d bytes' % len(vector_table))
+    print('  Cabecalho OTA valido              : sim')
+    print('  CRC32 do firmware valido          : sim')
 
-    firmware = pacote[16:]
-    crc_calculado = binascii.crc32(firmware) & 0xFFFFFFFF
-    if crc_calculado != fw_crc:
-        raise Exception('ERROR: CRC32 do firmware invalido: esperado 0x%08X, calculado 0x%08X' % (fw_crc, crc_calculado))
+    if len(firmware) < 16:
+        print('  Vector table incompleta: sao necessarios ao menos 16 bytes para MSP/Reset/NMI/HardFault')
+        return
 
-    print('Pacote    : %s' % caminho_pacote)
-    print('Magic     : 0x%08X' % magic)
-    print('Tamanho   : %d bytes (0x%X)' % (fw_size, fw_size))
-    print('CRC32     : 0x%08X' % fw_crc)
-    print('Reservado : 0x%08X' % reservado)
+    msp, reset_handler, nmi_handler, hardfault_handler = struct.unpack_from('<IIII', firmware, 0)
+    print('  MSP            : 0x%08X' % msp)
+    print('    Faixa SRAM   : %s (%s - %s)' % (
+        'sim' if asr_endereco_em_sram(msp) else 'nao',
+        hex(ARM_SRAM_START),
+        hex(ARM_SRAM_END),
+    ))
+    asr_imprimir_analise_vetor('  Reset_Handler', reset_handler)
+    asr_imprimir_analise_vetor('  NMI', nmi_handler)
+    asr_imprimir_analise_vetor('  HardFault', hardfault_handler)
 
 
 def asr_ota_assinado(param):

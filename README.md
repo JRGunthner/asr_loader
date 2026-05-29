@@ -29,6 +29,7 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
   - [serial](#serial)
   - [ota_pack](#ota_pack)
   - [ota_pack_verify](#ota_pack_verify)
+  - [ota_pack_inspect](#ota_pack_inspect)
   - [ota_assinado](#ota_assinado)
   - [ota_assinado_verify](#ota_assinado_verify)
   - [jump](#jump)
@@ -403,6 +404,19 @@ Fluxo típico no bootloader:
 - o firmware dentro do pacote é bruto, sem trailer de autenticação;
 - diferente do `ota_assinado`, o `ota_pack` fornece apenas verificação de integridade, não autenticação criptográfica.
 
+#### Inspeção estrutural no MCU antes da gravação
+
+Para deixar o mesmo critério do bootloader visível no LOG antes de gravar, use `ota_pack_inspect`.
+
+Esse comando mostra:
+
+- header OTA já validado;
+- `CRC32` do firmware;
+- primeiros 64 bytes da `vector table`;
+- `MSP`, `Reset_Handler`, `NMI` e `HardFault`;
+- se o `Reset_Handler` está com Thumb setado;
+- se os handlers caem na faixa esperada da aplicação.
+
 #### Exemplo de fluxo de uso
 
 1. gerar o pacote OTA simples:
@@ -417,8 +431,14 @@ Fluxo típico no bootloader:
    python asr_loader.py ota_pack_verify app_ota.bin
    ```
 
-3. gravar `app_ota.bin` na flash externa a partir de `0x00000000`;
-4. resetar o equipamento para o bootloader do firmware processar a imagem.
+3. opcionalmente inspecionar a `vector table` e a estrutura básica da app:
+
+   ```powershell
+   python asr_loader.py ota_pack_inspect app_ota.bin
+   ```
+
+4. gravar `app_ota.bin` na flash externa a partir de `0x00000000`;
+5. resetar o equipamento para o bootloader do firmware processar a imagem.
 
 ---
 
@@ -434,6 +454,28 @@ ota_pack_verify <arquivo_ota.bin>
 **Exemplo:**
 ```powershell
 python asr_loader.py ota_pack_verify app_ota.bin
+```
+
+---
+
+### ota_pack_inspect
+Inspeciona um pacote OTA simples e mostra no LOG a estrutura inicial da aplicação antes da gravação.
+
+Saída esperada:
+
+- header OTA;
+- `CRC32` validado;
+- primeiros 64 bytes da `vector table`;
+- análise estrutural de `MSP`, `Reset_Handler`, `NMI` e `HardFault`.
+
+**Formato:**
+```text
+ota_pack_inspect <arquivo_ota.bin>
+```
+
+**Exemplo:**
+```powershell
+python asr_loader.py ota_pack_inspect app_ota.bin
 ```
 
 ---
@@ -526,6 +568,7 @@ auth_tag = SipHash128(prefixo_autenticado || firmware, chave_16_bytes)
 
 O `ota_assinado` lê a chave do macro `BOOT_SECURITY_KEY_BYTES` dentro de `boot_security_config.h`.
 O bootloader do firmware precisa usar exatamente a mesma chave.
+O parser do `asr_loader` aceita tanto a forma em linha única quanto a forma multi-linha com sufixos `U`/`UL` nos bytes.
 
 Exemplo esperado pelo empacotador:
 

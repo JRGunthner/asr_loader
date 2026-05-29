@@ -92,19 +92,19 @@ def parse_key_from_header(header_path: pathlib.Path) -> bytes:
         raise ValueError('Arquivo de chave nao encontrado: %s' % header_path)
 
     content = header_path.read_text(encoding="utf-8")
-    match = re.search(r"#define\s+BOOT_SECURITY_KEY_BYTES\s+(.+)", content, re.MULTILINE)
+    match = re.search(
+        r"#define\s+BOOT_SECURITY_KEY_BYTES\s*(?P<macro>\{.*?})",
+        content,
+        re.MULTILINE | re.DOTALL,
+    )
     if not match:
         raise ValueError("Nao foi possivel localizar BOOT_SECURITY_KEY_BYTES")
 
-    macro_value = match.group(1)
-    while macro_value.rstrip().endswith("\\"):
-        macro_value = macro_value.rstrip()[:-1]
-        next_line_match = re.search(r"#define\s+BOOT_SECURITY_KEY_BYTES\s+.+\n((?:.+\n)+?)\n#ifdef", content, re.MULTILINE)
-        if next_line_match:
-            macro_value = (match.group(1) + "\n" + next_line_match.group(1)).replace("\\", " ")
-        break
+    macro_value = match.group('macro').replace('\\', ' ')
+    macro_value = re.sub(r"//.*?$", "", macro_value, flags=re.MULTILINE)
+    macro_value = re.sub(r"/\*.*?\*/", "", macro_value, flags=re.DOTALL)
 
-    values = re.findall(r"0x([0-9A-Fa-f]{1,2})U?", macro_value)
+    values = re.findall(r"0x([0-9A-Fa-f]{1,2})(?:[Uu][Ll]?|[Ll][Uu]?)?", macro_value)
     if len(values) != 16:
         raise ValueError("Esperados 16 bytes de chave, encontrados %d" % len(values))
 

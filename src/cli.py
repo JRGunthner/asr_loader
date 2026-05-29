@@ -20,6 +20,7 @@ from .comandos import (
     asr_ler_otp,
     asr_ler_reg,
     asr_ota_pack,
+    asr_ota_pack_inspect,
     asr_ota_pack_verify,
     asr_ota_assinado,
     asr_ota_assinado_verify,
@@ -45,6 +46,7 @@ class Comandos(str, Enum):
 
     OTA_PACK = 'ota_pack'
     OTA_PACK_VERIFY = 'ota_pack_verify'
+    OTA_PACK_INSPECT = 'ota_pack_inspect'
     OTA_ASSINADO = 'ota_assinado'
     OTA_ASSINADO_VERIFY = 'ota_assinado_verify'
 
@@ -211,6 +213,10 @@ def cli_build_parser():
                                                    help='verifica um pacote OTA com header + firmware binario')
     parser_ota_pack_verify.add_argument(Argumentos.INPUT.value, help='arquivo OTA para verificacao')
 
+    parser_ota_pack_inspect = subparsers.add_parser(Comandos.OTA_PACK_INSPECT.value,
+                                                    help='inspeciona um pacote OTA e analisa a vector table da app')
+    parser_ota_pack_inspect.add_argument(Argumentos.INPUT.value, help='arquivo OTA para inspecao')
+
     parser_ota_assinado = subparsers.add_parser(Comandos.OTA_ASSINADO.value,
                                                 help='gera pacote OTA assinado com trailer de autenticacao')
     parser_ota_assinado.add_argument(Argumentos.FIRMWARE.value, help='arquivo .bin de firmware sem header OTA')
@@ -256,6 +262,9 @@ def main(argv=None):
         if args.command == Comandos.OTA_PACK_VERIFY.value:
             asr_ota_pack_verify(args)
             print('Pacote OTA verificado com sucesso')
+            return
+        if args.command == Comandos.OTA_PACK_INSPECT.value:
+            asr_ota_pack_inspect(args)
             return
         if args.command == Comandos.OTA_ASSINADO.value:
             asr_ota_assinado(args)

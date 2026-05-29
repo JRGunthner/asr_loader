@@ -10,6 +10,8 @@
 - Adição do comando `ota_pack_verify` para validar pacotes OTA simples gerados por `ota_pack`.
 - Adição do comando `ler_mem` para consultar regiões maiores de memória do ASR in-circuit via leituras sequenciais de 32 bits.
 - O comando `versao` agora exibe também a data de build da execução atual, usando o `.exe` quando distribuído e `tremo_loader.py` quando executado via Python.
+- Adição do comando `ota_pack_inspect` para inspecionar no LOG o header OTA, o CRC e a vector table da aplicação antes da gravação.
+- Correção do parser de `BOOT_SECURITY_KEY_BYTES` para aceitar a forma multi-linha com sufixos `U`/`UL`, conforme documentado no manual.
 
 ## v1.2 - 2025-10-07
 - Estruturação modular da aplicação em `src/`, separando CLI, comandos, protocolo, constantes, utilitários e runtime.
