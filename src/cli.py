@@ -24,6 +24,8 @@ from .comandos import (
     asr_ota_pack_verify,
     asr_ota_assinado,
     asr_ota_assinado_verify,
+    asr_ota_cript,
+    asr_ota_ota_verify,
     asr_serial_asr,
     asr_sw_reset,
     asr_verify,
@@ -49,6 +51,8 @@ class Comandos(str, Enum):
     OTA_PACK_INSPECT = 'ota_pack_inspect'
     OTA_ASSINADO = 'ota_assinado'
     OTA_ASSINADO_VERIFY = 'ota_assinado_verify'
+    OTA_CRIPT = 'ota_cript'
+    OTA_CRIPT_VERIFY = 'ota_cript_verify'
 
     JUMP = 'jump'
 
@@ -233,6 +237,23 @@ def cli_build_parser():
     parser_ota_assinado_verify.add_argument('--key-header', dest=Argumentos.KEY_HEADER.value,
                                             help='header C com BOOT_SECURITY_KEY_BYTES')
 
+    parser_ota_cript = subparsers.add_parser(
+        Comandos.OTA_CRIPT.value,
+        help='gera pacote OTA criptografado com trailer v2',
+    )
+    parser_ota_cript.add_argument(Argumentos.FIRMWARE.value, help='arquivo .bin de firmware sem header OTA')
+    parser_ota_cript.add_argument(Argumentos.OUTPUT.value, nargs='?',
+                                  help='arquivo de saida (padrao: <firmware>_ota_cript.bin)')
+    parser_ota_cript.add_argument('--firmware-version', dest=Argumentos.FIRMWARE_VERSION.value, type=arg_int,
+                                  default=1, help='versao numerica do firmware usada na autenticacao')
+    parser_ota_cript.add_argument('--key-header', dest=Argumentos.KEY_HEADER.value,
+                                  help='header C com BOOT_SECURITY_KEY_BYTES')
+
+    parser_ota_cript_verify = subparsers.add_parser(Comandos.OTA_CRIPT_VERIFY.value, help='verifica pacote OTA criptografado')
+    parser_ota_cript_verify.add_argument(Argumentos.INPUT.value, help='arquivo OTA criptografado')
+    parser_ota_cript_verify.add_argument('--key-header', dest=Argumentos.KEY_HEADER.value,
+                                         help='header C com BOOT_SECURITY_KEY_BYTES')
+
     subparsers.add_parser(Comandos.HELP.value, help='mostra essa mensagem de ajuda e sai')
     subparsers.add_parser(Comandos.VERSAO.value, help='mostra a versao do ASR Loader')
 
@@ -273,6 +294,14 @@ def main(argv=None):
         if args.command == Comandos.OTA_ASSINADO_VERIFY.value:
             asr_ota_assinado_verify(args)
             print('Pacote OTA assinado verificado com sucesso')
+            return
+        if args.command in Comandos.OTA_CRIPT.value:
+            asr_ota_cript(args)
+            print('Pacote OTA criptografado gerado com sucesso')
+            return
+        if args.command in Comandos.OTA_CRIPT_VERIFY.value:
+            asr_ota_ota_verify(args)
+            print('Pacote OTA validado com sucesso')
             return
 
         config = RuntimeConfig(
@@ -337,7 +366,7 @@ def main(argv=None):
             versao = asr_versao_bootloader(args, asr_mcu, config)
             versao_raw = versao[0]
             versao_bytes = ' '.join('%02X' % byte for byte in struct.pack('<I', versao_raw))
-            print('VERSION retornado pelo bootloader (valor bruto): 0x%08X (%d)' % (versao_raw, versao_raw))
+            print('VERSAO retornada pelo bootloader (valor bruto): 0x%08X (%d)' % (versao_raw, versao_raw))
             print('Bytes retornados: %s' % versao_bytes)
         elif args.command == Comandos.CLEAR_EEPROM.value:
             asr_clean_eeprom(args, asr_mcu, config)

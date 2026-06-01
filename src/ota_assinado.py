@@ -104,11 +104,19 @@ def parse_key_from_header(header_path: pathlib.Path) -> bytes:
     macro_value = re.sub(r"//.*?$", "", macro_value, flags=re.MULTILINE)
     macro_value = re.sub(r"/\*.*?\*/", "", macro_value, flags=re.DOTALL)
 
-    values = re.findall(r"0x([0-9A-Fa-f]{1,2})(?:[Uu][Ll]?|[Ll][Uu]?)?", macro_value)
-    if len(values) != 16:
-        raise ValueError("Esperados 16 bytes de chave, encontrados %d" % len(values))
+    tokens = re.findall(r"0x[0-9A-Fa-f]{1,2}(?:[Uu][Ll]?|[Ll][Uu]?)?|\d+(?:[Uu][Ll]?|[Ll][Uu]?)?", macro_value)
+    if len(tokens) != 16:
+        raise ValueError("Esperados 16 bytes de chave, encontrados %d" % len(tokens))
 
-    return bytes(int(value, 16) for value in values)
+    values = []
+    for token in tokens:
+        token_limpo = re.sub(r"(?:[Uu][Ll]?|[Ll][Uu]?)$", "", token)
+        value = int(token_limpo, 0)
+        if not 0 <= value <= 0xFF:
+            raise ValueError("Valor de byte invalido na chave: %s" % token)
+        values.append(value)
+
+    return bytes(values)
 
 
 def prefix_autenticado(firmware_version: int, firmware_size: int, firmware_crc32: int) -> bytes:

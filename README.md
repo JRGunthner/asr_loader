@@ -14,7 +14,7 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
 - [Uso](#uso)
 - [Parâmetros globais](#parâmetros-globais)
   - [COM PORT: -p ou --port](#com-port--p-ou---port)
-  - [Baudrate: -b ou --baudrate](#baudrate--b-ou---baudrate)
+  - [Baudrate: -b ou --baud](#baudrate--b-ou---baud)
   - [Modo log verboso: -v ou --verbose](#modo-log-verboso--v-ou---verbose)
   - [Timeout de conexão: -t ou --timeout](#timeout-de-conexão--t-ou---timeout)
   - [Manter EEPROM: -e ou --eeprom](#manter-eeprom--e-ou---eeprom)
@@ -32,6 +32,8 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
   - [ota_pack_inspect](#ota_pack_inspect)
   - [ota_assinado](#ota_assinado)
   - [ota_assinado_verify](#ota_assinado_verify)
+  - [ota_cript](#ota_cript)
+  - [ota_cript_verify](#ota_cript_verify)
   - [jump](#jump)
   - [versao_bootloader](#versao_bootloader)
   - [ler_otp](#ler_otp)
@@ -121,14 +123,14 @@ make -p COM3 flash 0x08000000 app.bin
 ```
 ---
 
-### Baudrate: -b ou --baudrate
+### Baudrate: -b ou --baud
 Configura o baudrate.
 Por padrão vem com 921600, caso não seja passado nada.
 
 **Formato:**
 ```text
 -b <baudrate>
---baudrate <baudrate>
+--baud <baudrate>
 ```
 
 **Exemplo:**
@@ -641,6 +643,7 @@ Fluxo típico no bootloader:
 - a autenticação é feita sobre o firmware bruto, não sobre a imagem já gravada na flash interna;
 - o campo `firmware_version` pode ser usado pelo bootloader para política de anti-rollback, se desejar;
 - hoje a ferramenta gera `trailer_version = 1` e `flags = 1`, então o bootloader deve validar exatamente esses valores.
+- se você também precisa de confidencialidade do payload na flash externa, use `ota_cript`.
 
 #### Exemplo de fluxo de uso
 
@@ -670,6 +673,193 @@ ota_assinado_verify <arquivo_ota_assinado.bin> [--key-header <boot_security_conf
 **Exemplo:**
 ```powershell
 python asr_loader.py ota_assinado_verify app_ota_assinado.bin --key-header C:\projeto\boot_security_config.h
+```
+
+---
+
+### ota_cript
+Gera um pacote OTA assinado + criptografado, totalmente integrado ao `asr_loader.py` principal.
+Use esse arquivo para gravação na flash externa a partir do endereço `0x00000000`.
+
+**Formato:**
+```text
+ota_cript <arquivo_firmware.bin> [arquivo_saida.bin] [--firmware-version <versao>] [--key-header <boot_security_config.h>]
+```
+
+**Exemplo:**
+```powershell
+python asr_loader.py ota_cript app.bin app_ota_cript.bin --firmware-version 7 --key-header C:\projeto\boot_security_config.h
+```
+
+Se `arquivo_saida.bin` não for informado, o nome padrão será `<arquivo_firmware>_ota_cript.bin`.
+Se `--key-header` não for informado, a ferramenta tenta localizar o `boot_security_config.h` no caminho padrão; caso ele não exista no ambiente atual, informe o caminho explicitamente.
+
+#### Formato do pacote
+
+```text
++-------------------------------+
+| Header OTA (16 bytes)         |
++-------------------------------+
+| Firmware criptografado (N)    |
++-------------------------------+
+| Trailer v2 (44 bytes)         |
++-------------------------------+
+```
+
+#### Header OTA (16 bytes)
+
+Todos os campos em `little-endian`:
+
+```text
+Offset  Tamanho  Campo
+0x00    4        magic      = 0xB00710AD
+0x04    4        size       = tamanho do firmware em bytes
+0x08    4        crc32      = CRC32 IEEE do firmware em claro
+0x0C    4        reserved   = 0x00000000
+```
+
+#### Trailer v2 (44 bytes)
+
+Todos os campos em `little-endian`:
+
+```text
+Offset relativo ao trailer  Tamanho  Campo
+0x00                        4        trailer_magic   = 0x41545548
+0x04                        4        trailer_version = 2
+0x08                        4        flags           = 0x00000003
+0x0C                        4        firmware_version
+0x10                        8        nonce
+0x18                        16       auth_tag
+0x28                        4        trailer_crc32
+```
+
+#### Como a criptografia funciona
+
+O payload usa um fluxo derivado de `SipHash-64` já compatível com o `boot_assinado`:
+
+```text
+keystream_bloco = SipHash64(nonce || contador, chave, domain=2)
+ciphertext      = plaintext XOR keystream
+plaintext       = ciphertext XOR keystream
+```
+
+O `header` OTA permanece em claro, o payload do firmware vai criptografado e o trailer permanece em claro para permitir autenticação antes da instalação.
+
+#### O que a autenticação cobre
+
+A `auth_tag` cobre:
+
+```text
+[ trailer_version,
+  flags,
+  firmware_version,
+  firmware_size,
+  firmware_crc32,
+  nonce ] || firmware_criptografado
+```
+
+Assim:
+
+- se o payload criptografado for alterado, a autenticação falha antes de apagar a flash interna;
+- durante a instalação, o bootloader decripta em streaming e valida o `CRC32` do firmware em claro.
+
+#### O que o firmware/bootloader precisa implementar
+
+Para que o `ota_cript` funcione no bootloader do firmware, o bootloader precisa validar primeiro o pacote criptografado ainda na flash externa e só então decriptar/copiar a imagem para a flash interna.
+
+Uma estrutura mínima equivalente em C pode seguir esta linha:
+
+```c
+typedef struct {
+    uint32_t magic;
+    uint32_t size;
+    uint32_t crc32;
+    uint32_t reserved;
+} ota_header_t;
+
+typedef struct {
+    uint32_t trailer_magic;
+    uint32_t trailer_version;
+    uint32_t flags;
+    uint32_t firmware_version;
+    uint8_t  nonce[8];
+    uint8_t  auth_tag[16];
+    uint32_t trailer_crc32;
+} ota_auth_trailer_v2_t;
+```
+
+O bootloader deve usar exatamente a mesma chave `BOOT_SECURITY_KEY_BYTES` do empacotador.
+Se a chave for diferente, a autenticação falha mesmo que o arquivo esteja estruturalmente correto.
+
+#### Sequência de validação recomendada no bootloader
+
+Ao encontrar um pacote OTA seguro na flash externa, o bootloader deve:
+
+1. ler e validar o `header` OTA;
+2. localizar o trailer em `offset = 16 + size`;
+3. validar `trailer_magic == 0x41545548`;
+4. validar `trailer_version == 2`;
+5. validar `flags == 0x00000003`;
+6. validar o `CRC32` do trailer sem o último campo `trailer_crc32`;
+7. montar o prefixo autenticado usando também o `nonce`;
+8. recalcular a `auth_tag` usando o firmware criptografado;
+9. somente se a autenticação passar, decriptar o firmware em streaming;
+10. validar o `CRC32` do firmware em claro contra o campo `crc32` do header;
+11. somente então aceitar a imagem para upgrade.
+
+#### Fluxo prático sugerido no firmware
+
+Fluxo típico no bootloader:
+
+1. localizar o pacote OTA na flash externa em `0x00000000`;
+2. validar `header` e `trailer` ainda sem decriptar a imagem;
+3. recalcular a `auth_tag` sobre o payload criptografado;
+4. se a autenticação falhar, abortar o update e manter a aplicação atual;
+5. se a autenticação passar, decriptar em blocos e gravar/copiar para a flash interna;
+6. calcular o `CRC32` do firmware em claro durante a cópia;
+7. comparar o `CRC32` final com o valor do `header`;
+8. somente então marcar a atualização como válida.
+
+#### Observações importantes
+
+- o campo `size` do `header` continua representando o tamanho do firmware em claro;
+- o `CRC32` do `header` é do firmware em claro, não do payload criptografado;
+- a `auth_tag` protege o trailer lógico e o payload criptografado;
+- o `nonce` precisa ser lido do trailer e reutilizado na decriptação via `SipHash64(nonce || contador, chave, domain=2)`;
+- o comando `ota_cript_verify` também aceita pacotes legados do `ota_assinado` (`trailer_version = 1`) para facilitar testes de bancada.
+
+#### Exemplo de fluxo de uso
+
+1. gerar o pacote assinado + criptografado:
+
+   ```powershell
+   python asr_loader.py ota_cript app.bin app_ota_cript.bin --firmware-version 7 --key-header C:\projeto\boot_security_config.h
+   ```
+
+2. opcionalmente validar localmente:
+
+   ```powershell
+   python asr_loader.py ota_cript_verify app_ota_cript.bin --key-header C:\projeto\boot_security_config.h
+   ```
+
+3. gravar `app_ota_cript.bin` na flash externa a partir de `0x00000000`;
+4. resetar o equipamento para o bootloader do firmware processar a imagem.
+
+---
+
+### ota_cript_verify
+Verifica um pacote OTA assinado + criptografado com trailer v2 usando a chave configurada.
+
+Este verificador também aceita pacotes legados do `ota_assinado` (`trailer_version = 1`) para facilitar validação local em um único fluxo.
+
+**Formato:**
+```text
+ota_cript_verify <arquivo_ota.bin> [--key-header <boot_security_config.h>]
+```
+
+**Exemplo:**
+```powershell
+python asr_loader.py ota_cript_verify app_ota_cript.bin --key-header C:\projeto\boot_security_config.h
 ```
 
 ---

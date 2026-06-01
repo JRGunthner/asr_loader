@@ -4,9 +4,10 @@ import pathlib
 import struct
 from typing import TypedDict
 from .constantes import EEPROM_ENDERECO_ASR6601CB, EEPROM_ENDERECO_ASR6601SE, EEPROM_SIZE, OTA_MAGIC
-from .ota_assinado import build_ota_assinado_package, crc32_ieee, default_key_header, parse_key_from_header, ota_assinado_verify_package
+from .ota_assinado import build_ota_assinado_package, crc32_ieee, default_key_header, parse_key_from_header, \
+    ota_assinado_verify_package
+from .ota_pacote_cripto import caminho_saida_segura_padrao, montar_pacote_seguro, verificar_pacote_seguro
 from .utils import get_crc32
-
 
 ASR_APP_FLASH_START = 0x08000000
 ASR_APP_FLASH_END = 0x08040000
@@ -238,7 +239,8 @@ def asr_ota_pack_ler_info(caminho_pacote) -> AsrOtaPackInfo:
     firmware = pacote[16:]
     crc_calculado = binascii.crc32(firmware) & 0xFFFFFFFF
     if crc_calculado != fw_crc:
-        raise Exception('ERROR: CRC32 do firmware invalido: esperado 0x%08X, calculado 0x%08X' % (fw_crc, crc_calculado))
+        raise Exception(
+            'ERROR: CRC32 do firmware invalido: esperado 0x%08X, calculado 0x%08X' % (fw_crc, crc_calculado))
 
     return {
         'caminho': caminho_pacote,
@@ -405,7 +407,8 @@ def asr_ota_assinado(param):
     else:
         out_path = param.output
 
-    key_header = pathlib.Path(param.key_header).resolve() if param.key_header is not None else default_key_header().resolve()
+    key_header = pathlib.Path(
+        param.key_header).resolve() if param.key_header is not None else default_key_header().resolve()
     key = parse_key_from_header(key_header)
 
     with open(fw_path, 'rb') as arquivo:
@@ -433,7 +436,8 @@ def asr_ota_assinado_verify(param):
     if not os.path.isfile(package_path):
         raise Exception('ERROR: arquivo nao encontrado: %s' % package_path)
 
-    key_header = pathlib.Path(param.key_header).resolve() if param.key_header is not None else default_key_header().resolve()
+    key_header = pathlib.Path(
+        param.key_header).resolve() if param.key_header is not None else default_key_header().resolve()
     key = parse_key_from_header(key_header)
 
     with open(package_path, 'rb') as arquivo:
@@ -446,3 +450,56 @@ def asr_ota_assinado_verify(param):
     print('Versao   : %d' % version)
     print('AuthTag  : %s' % auth_tag.hex())
     print('Chave    : %s' % key_header)
+
+
+def asr_ota_cript(param):
+    caminho_firmware = pathlib.Path(param.firmware)
+    if not caminho_firmware.is_file():
+        raise Exception('ERROR: arquivo nao encontrado: %s' % caminho_firmware)
+
+    caminho_saida = pathlib.Path(param.output) if param.output is not None else caminho_saida_segura_padrao(
+        caminho_firmware)
+    cabecalho_chave = pathlib.Path(
+        param.key_header).resolve() if param.key_header is not None else default_key_header().resolve()
+    chave = parse_key_from_header(cabecalho_chave)
+    dados_firmware = caminho_firmware.read_bytes()
+
+    pacote = montar_pacote_seguro(dados_firmware, param.firmware_version, chave)
+    caminho_saida.parent.mkdir(parents=True, exist_ok=True)
+    caminho_saida.write_bytes(pacote)
+
+    pacote_parseado, _firmware_claro = verificar_pacote_seguro(pacote, chave)
+
+    print('Firmware : %s' % caminho_firmware)
+    print('Tamanho  : %d bytes (0x%X)' % (len(dados_firmware), len(dados_firmware)))
+    print('CRC32    : 0x%08X' % crc32_ieee(dados_firmware))
+    print('Versao   : %d' % pacote_parseado.versao_firmware)
+    print('Flags    : 0x%08X' % pacote_parseado.flags)
+    print('Nonce    : %s' % pacote_parseado.nonce.hex())
+    print('AuthTag  : %s' % pacote_parseado.tag_autenticacao.hex())
+    print('Chave    : %s' % cabecalho_chave)
+    print('Saida    : %s  (%d bytes no total)' % (caminho_saida, len(pacote)))
+    print('Grave o arquivo de saida a partir do endereco 0x00000000 da flash externa.')
+
+
+def asr_ota_ota_verify(param):
+    caminho_pacote = pathlib.Path(param.input)
+    if not caminho_pacote.is_file():
+        raise Exception('ERROR: arquivo nao encontrado: %s' % caminho_pacote)
+
+    cabecalho_chave = pathlib.Path(
+        param.key_header).resolve() if param.key_header is not None else default_key_header().resolve()
+    chave = parse_key_from_header(cabecalho_chave)
+    pacote = caminho_pacote.read_bytes()
+    pacote_parseado, _firmware_claro = verificar_pacote_seguro(pacote, chave)
+
+    print('Pacote           : %s' % caminho_pacote)
+    print('TrailerVersion   : %d' % pacote_parseado.versao_trailer)
+    print('Flags            : 0x%08X' % pacote_parseado.flags)
+    print('Firmware         : %d bytes (0x%X)' % (pacote_parseado.tamanho, pacote_parseado.tamanho))
+    print('Firmware CRC32   : 0x%08X' % pacote_parseado.crc32_firmware_claro)
+    print('Versao           : %d' % pacote_parseado.versao_firmware)
+    if pacote_parseado.nonce:
+        print('Nonce            : %s' % pacote_parseado.nonce.hex())
+    print('AuthTag          : %s' % pacote_parseado.tag_autenticacao.hex())
+    print('Chave            : %s' % cabecalho_chave)
