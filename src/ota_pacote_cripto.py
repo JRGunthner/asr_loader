@@ -11,11 +11,13 @@ from .ota_assinado import (
     OTA_AUTH_TRAILER_MAGIC,
     OTA_HEADER_SIZE,
     OTA_MAGIC,
+    append_ota_tche_sufixo,
     crc32_ieee,
     default_key_header,
     parse_key_from_header,
     siphash64,
     siphash128,
+    split_ota_tche_sufixo,
 )
 
 OTA_AUTH_TRAILER_VERSION_LEGADO = 1
@@ -99,7 +101,7 @@ def montar_pacote_seguro(firmware: bytes, versao_firmware: int, chave: bytes, no
         versao_firmware & 0xFFFFFFFF,
     ) + nonce + tag_autenticacao
     crc32_trailer = struct.pack('<I', crc32_ieee(trailer_sem_crc))
-    return header + firmware_criptografado + trailer_sem_crc + crc32_trailer
+    return append_ota_tche_sufixo(header + firmware_criptografado + trailer_sem_crc + crc32_trailer)
 
 
 def ler_pacote_seguro(pacote: bytes) -> PacoteOtaSeguroParseado:
@@ -126,15 +128,13 @@ def ler_pacote_seguro(pacote: bytes) -> PacoteOtaSeguroParseado:
 
     if versao_trailer == OTA_AUTH_TRAILER_VERSION_LEGADO:
         tamanho_trailer = TAMANHO_TRAILER_LEGADO
-        if offset_trailer + tamanho_trailer != len(pacote):
-            raise ValueError('Pacote OTA assinado legado com tamanho inesperado')
+        pacote = split_ota_tche_sufixo(pacote, offset_trailer + tamanho_trailer)
         tag_autenticacao = pacote[offset_trailer + 16:offset_trailer + 32]
         crc32_trailer = struct.unpack_from('<I', pacote, offset_trailer + 32)[0]
         nonce = b''
     elif versao_trailer == OTA_AUTH_TRAILER_VERSION_CRIPTO:
         tamanho_trailer = TAMANHO_TRAILER_CRIPTO
-        if offset_trailer + tamanho_trailer != len(pacote):
-            raise ValueError('Pacote OTA criptografado com tamanho inesperado')
+        pacote = split_ota_tche_sufixo(pacote, offset_trailer + tamanho_trailer)
         nonce = pacote[offset_trailer + 16:offset_trailer + 24]
         tag_autenticacao = pacote[offset_trailer + 24:offset_trailer + 40]
         crc32_trailer = struct.unpack_from('<I', pacote, offset_trailer + 40)[0]

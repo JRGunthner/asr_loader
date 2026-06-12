@@ -5,7 +5,7 @@ import struct
 from typing import TypedDict
 from .constantes import EEPROM_ENDERECO_ASR6601CB, EEPROM_ENDERECO_ASR6601SE, EEPROM_SIZE, OTA_MAGIC
 from .ota_assinado import build_ota_assinado_package, crc32_ieee, default_key_header, parse_key_from_header, \
-    ota_assinado_verify_package
+    ota_assinado_verify_package, append_ota_tche_sufixo, split_ota_tche_sufixo
 from .ota_pacote_cripto import caminho_saida_segura_padrao, montar_pacote_seguro, verificar_pacote_seguro
 from .utils import get_crc32
 
@@ -233,8 +233,10 @@ def asr_ota_pack_ler_info(caminho_pacote) -> AsrOtaPackInfo:
         raise Exception('ERROR: campo reservado invalido: 0x%08X' % reservado)
 
     tamanho_esperado = 16 + fw_size
-    if len(pacote) != tamanho_esperado:
-        raise Exception('ERROR: tamanho total invalido: esperado %d, encontrado %d' % (tamanho_esperado, len(pacote)))
+    try:
+        pacote = split_ota_tche_sufixo(pacote, tamanho_esperado)
+    except ValueError as excessao:
+        raise Exception('ERROR: %s' % excessao)
 
     firmware = pacote[16:]
     crc_calculado = binascii.crc32(firmware) & 0xFFFFFFFF
@@ -335,15 +337,15 @@ def asr_ota_pack(param):
     fw_size = len(fw_data)
     fw_crc = binascii.crc32(fw_data) & 0xFFFFFFFF
     header = struct.pack('<IIII', OTA_MAGIC, fw_size, fw_crc, 0)
+    pacote = append_ota_tche_sufixo(header + fw_data)
 
     with open(out_path, 'wb') as arquivo:
-        arquivo.write(header)
-        arquivo.write(fw_data)
+        arquivo.write(pacote)
 
     print('Firmware : %s' % fw_path)
     print('Tamanho  : %d bytes (0x%X)' % (fw_size, fw_size))
     print('CRC32    : 0x%08X' % fw_crc)
-    print('Saida    : %s  (%d bytes no total)' % (out_path, len(header) + fw_size))
+    print('Saida    : %s  (%d bytes no total)' % (out_path, len(pacote)))
     print('Grave o arquivo de saida a partir do endereco 0x00000000 da flash externa.')
 
 

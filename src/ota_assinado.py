@@ -10,6 +10,8 @@ OTA_AUTH_TRAILER_MAGIC = 0x41545548
 OTA_AUTH_TRAILER_VERSION = 1
 OTA_AUTH_FLAG_SIPHASH128 = 0x00000001
 OTA_AUTH_TAG_SIZE = 16
+OTA_TCHE_SUFFIX = bytes((0x00, 0x54, 0x43, 0x48, 0x45, 0x00))
+OTA_TCHE_SUFFIX_SIZE = len(OTA_TCHE_SUFFIX)
 TRAILER_STRUCT = struct.Struct("<IIII16sI")
 HEADER_STRUCT = struct.Struct("<IIII")
 PREFIX_STRUCT = struct.Struct("<IIIII")
@@ -129,6 +131,22 @@ def prefix_autenticado(firmware_version: int, firmware_size: int, firmware_crc32
     )
 
 
+def append_ota_tche_sufixo(package: bytes) -> bytes:
+    return package + OTA_TCHE_SUFFIX
+
+
+def split_ota_tche_sufixo(package: bytes, expected_size: int) -> bytes:
+    if len(package) == expected_size:
+        return package
+    if len(package) == expected_size + OTA_TCHE_SUFFIX_SIZE and package.endswith(OTA_TCHE_SUFFIX):
+        return package[:-OTA_TCHE_SUFFIX_SIZE]
+    raise ValueError("Tamanho total invalido: esperado %d ou %d bytes, encontrado %d" % (
+        expected_size,
+        expected_size + OTA_TCHE_SUFFIX_SIZE,
+        len(package),
+    ))
+
+
 def build_ota_assinado_package(firmware: bytes, firmware_version: int, key: bytes) -> bytes:
     firmware_crc32 = crc32_ieee(firmware)
     header = HEADER_STRUCT.pack(OTA_MAGIC, len(firmware), firmware_crc32, 0)
@@ -151,7 +169,7 @@ def build_ota_assinado_package(firmware: bytes, firmware_version: int, key: byte
         auth_tag,
         trailer_crc32,
     )
-    return header + firmware + trailer
+    return append_ota_tche_sufixo(header + firmware + trailer)
 
 
 def ota_assinado_verify_package(package: bytes, key: bytes) -> Tuple[int, int, bytes]:
@@ -163,8 +181,7 @@ def ota_assinado_verify_package(package: bytes, key: bytes) -> Tuple[int, int, b
         raise ValueError("Magic OTA invalido: 0x%08X" % magic)
 
     expected_size = OTA_HEADER_SIZE + size + TRAILER_STRUCT.size
-    if len(package) != expected_size:
-        raise ValueError("Tamanho total invalido: esperado %d, encontrado %d" % (expected_size, len(package)))
+    package = split_ota_tche_sufixo(package, expected_size)
 
     firmware = package[OTA_HEADER_SIZE:OTA_HEADER_SIZE + size]
     trailer = package[OTA_HEADER_SIZE + size:]
