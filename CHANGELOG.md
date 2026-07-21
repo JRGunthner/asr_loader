@@ -15,6 +15,11 @@
 - Integração completa do fluxo `ota secure pack` na CLI principal com os comandos `ota_cript` e `ota_cript_verify`.
 - O verificador do fluxo seguro agora também aceita pacotes OTA assinados legados (`trailer_version = 1`) no mesmo caminho de validação.
 - O parser de `BOOT_SECURITY_KEY_BYTES` passou a aceitar também bytes em decimal, além do formato hexadecimal com sufixos C.
+- Adição de boot automático configurável via `DTR/RTS` antes da conexão com o bootloader.
+- Adição das opções globais `--no-auto-boot`, `--boot-reset-delay` e `--boot-release-delay` para depuração e ajuste do circuito de auto boot.
+- Adição do comando `hw_reset` para pulsar reset via `RTS` sem precisar sincronizar com o bootloader, com opção `--boot` para acionar `DTR` durante o reset.
+- Adição dos comandos `dtr1`, `dtr0`, `rts1` e `rts0` para testar diretamente as linhas de controle da serial, com opção `--hold`.
+- Documentação no `README.md` do uso de `DTR/RTS`, comandos de teste das linhas e diferenças entre `reset` via software e `hw_reset` via hardware.
 
 ## v1.2 - 2025-10-07
 - Estruturação modular da aplicação em `src/`, separando CLI, comandos, protocolo, constantes, utilitários e runtime.

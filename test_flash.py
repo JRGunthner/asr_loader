@@ -13,7 +13,7 @@ def run_flash_command(address, filename, port=None, baud=921600):
 
     Args:
         address: Endereço de memória (ex: "0x08000000")
-        filename: Nome do arquivo binário (ex: "0x08000000-main.bin")
+        filename: Nome do arquivo binário (ex: "0x08000000-app.bin")
         port: Porta serial (opcional, auto-detecta se None)
         baud: Baud rate (padrão: 921600)
 
@@ -77,7 +77,7 @@ def test_basic_flash():
     print("\n### TESTE 1: Gravação básica ###")
     return run_flash_command(
         address="0x08000000",
-        filename="0x08000000-main.bin"
+        filename="0x08000000-app.bin"
     )
 
 
@@ -92,7 +92,7 @@ def test_flash_with_port():
 
     return run_flash_command(
         address="0x08000000",
-        filename="0x08000000-main.bin",
+        filename="0x08000000-app.bin",
         port=port
     )
 
@@ -102,7 +102,7 @@ def test_flash_custom_baud():
     print("\n### TESTE 3: Gravação com baud rate diferente ###")
     return run_flash_command(
         address="0x08000000",
-        filename="0x08000000-main.bin",
+        filename="0x08000000-app.bin",
         baud=115200
     )
 
@@ -116,7 +116,7 @@ def test_multiple_files():
     cmd = [
         "python", "asr_loader.py",
         "flash",
-        "0x08000000", "0x08000000-main.bin"
+        "0x08000000", "0x08000000-app.bin"
         # Adicione mais pares endereço/arquivo aqui se necessário
         # "0x08010000", "outro_arquivo.bin"
     ]
@@ -150,12 +150,12 @@ def check_prerequisites():
         print("✓ asr_loader.py encontrado")
 
     # Verifica se o arquivo binário existe
-    if not os.path.exists("0x08000000-main.bin"):
-        print("✗ 0x08000000-main.bin não encontrado!")
+    if not os.path.exists("0x08000000-app.bin"):
+        print("✗ 0x08000000-app.bin não encontrado!")
         return False
     else:
-        size = os.path.getsize("0x08000000-main.bin")
-        print(f"✓ 0x08000000-main.bin encontrado ({size} bytes)")
+        size = os.path.getsize("0x08000000-app.bin")
+        print(f"✓ 0x08000000-app.bin encontrado ({size} bytes)")
 
     # Verifica se pyserial está instalado
     try:

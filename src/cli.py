@@ -7,6 +7,7 @@ from enum import Enum
 from pathlib import Path
 from .comandos import (
     asr_clean_eeprom,
+    asr_controlar_linha_serial,
     asr_erase,
     asr_escrever_opt0,
     asr_escrever_opt1,
@@ -27,6 +28,7 @@ from .comandos import (
     asr_ota_cript,
     asr_ota_ota_verify,
     asr_serial_asr,
+    asr_hw_reset,
     asr_sw_reset,
     asr_verify,
     asr_versao_bootloader,
@@ -43,6 +45,11 @@ class Comandos(str, Enum):
     FLASH = 'flash'
     VERIFY = 'verify'
     RESET = 'reset'
+    HW_RESET = 'hw_reset'
+    DTR1 = 'dtr1'
+    DTR0 = 'dtr0'
+    RTS1 = 'rts1'
+    RTS0 = 'rts0'
     CLEAR_EEPROM = 'clear_eeprom'
     SERIAL = 'serial'
 
@@ -82,6 +89,7 @@ class Argumentos(str, Enum):
     VALUE = 'value'
     FILENAME = 'filename'
     FIRMWARE = 'firmware'
+    HOLD = 'hold'
     OUTPUT = 'output'
     INPUT = 'input'
     OPT0_L = 'opt0_l'
@@ -143,6 +151,21 @@ def cli_adicionar_argumentos(argumentos):
     argumentos.add_argument(Opcoes.TIMEOUT.long, Opcoes.TIMEOUT.short, help=Opcoes.TIMEOUT.texto, type=int,
                             default=TIMEOUT_DEFAULT)
     argumentos.add_argument(Opcoes.EEPROM.long, Opcoes.EEPROM.short, help=Opcoes.EEPROM.texto, action='store_true')
+    argumentos.add_argument('--no-auto-boot', help='nao aciona DTR/RTS automaticamente antes de conectar',
+                            action='store_true')
+    argumentos.add_argument('--boot-reset-delay', help='tempo em segundos mantendo o reset ativo via RTS, default 0.1s',
+                            type=float, default=0.1)
+    argumentos.add_argument('--boot-release-delay',
+                            help='tempo em segundos antes de liberar o modo boot via DTR, default 0.1s',
+                            type=float, default=0.1)
+
+
+def cli_adicionar_comando_linha_serial(subparsers, comando, linha, estado):
+    parser_linha = subparsers.add_parser(comando, help='seta %s=%d para teste de hardware' % (
+        linha.upper(), 1 if estado else 0))
+    parser_linha.add_argument('--hold', dest=Argumentos.HOLD.value, type=float,
+                              help='tempo em segundos mantendo a porta aberta; sem este parametro, aguarda Ctrl+C')
+    parser_linha.set_defaults(control_line=linha, control_state=estado)
 
 
 def cli_build_parser():
@@ -182,6 +205,14 @@ def cli_build_parser():
     subparsers.add_parser(Comandos.LER_OPT1.value, help='ler a area opt1 da flash')
     subparsers.add_parser(Comandos.SERIAL.value, help='ler o serial do ASR')
     subparsers.add_parser(Comandos.RESET.value, help='resetar o ASR')
+    parser_hw_reset = subparsers.add_parser(Comandos.HW_RESET.value,
+                                            help='resetar o ASR via linha RTS sem conectar no bootloader')
+    parser_hw_reset.add_argument('--boot', help='mantem DTR ativo durante o reset para entrar no bootloader',
+                                 action='store_true')
+    cli_adicionar_comando_linha_serial(subparsers, Comandos.DTR1.value, 'dtr', True)
+    cli_adicionar_comando_linha_serial(subparsers, Comandos.DTR0.value, 'dtr', False)
+    cli_adicionar_comando_linha_serial(subparsers, Comandos.RTS1.value, 'rts', True)
+    cli_adicionar_comando_linha_serial(subparsers, Comandos.RTS0.value, 'rts', False)
 
     parser_verify = subparsers.add_parser(Comandos.VERIFY.value, help='verificar o conteudo da flash')
     parser_verify.add_argument(Argumentos.ADDRESS.value, help='endereco da flash a ser verificado', type=arg_int)
@@ -249,7 +280,8 @@ def cli_build_parser():
     parser_ota_cript.add_argument('--key-header', dest=Argumentos.KEY_HEADER.value,
                                   help='header C com BOOT_SECURITY_KEY_BYTES')
 
-    parser_ota_cript_verify = subparsers.add_parser(Comandos.OTA_CRIPT_VERIFY.value, help='verifica pacote OTA criptografado')
+    parser_ota_cript_verify = subparsers.add_parser(Comandos.OTA_CRIPT_VERIFY.value,
+                                                    help='verifica pacote OTA criptografado')
     parser_ota_cript_verify.add_argument(Argumentos.INPUT.value, help='arquivo OTA criptografado')
     parser_ota_cript_verify.add_argument('--key-header', dest=Argumentos.KEY_HEADER.value,
                                          help='header C com BOOT_SECURITY_KEY_BYTES')
@@ -304,12 +336,18 @@ def main(argv=None):
             print('Pacote OTA validado com sucesso')
             return
 
+        if args.boot_reset_delay < 0 or args.boot_release_delay < 0:
+            raise Exception('ERROR: os tempos de boot automatico devem ser maiores ou iguais a zero')
+
         config = RuntimeConfig(
             verbose=args.verbose,
             com_timeout=args.timeout if args.timeout is not None else TIMEOUT_DEFAULT,
             apaga_eeprom=not args.eeprom,
             baud=args.baud,
             portas_disponiveis=get_lista_portas_com() if args.port is None else [args.port],
+            auto_boot=not args.no_auto_boot,
+            boot_reset_delay=args.boot_reset_delay,
+            boot_release_delay=args.boot_release_delay,
         )
 
         if args.port is None:
@@ -351,6 +389,15 @@ def main(argv=None):
         elif args.command == Comandos.RESET.value:
             asr_sw_reset(args, asr_mcu, config)
             print('Reset via software')
+        elif args.command == Comandos.HW_RESET.value:
+            if asr_hw_reset(args, asr_mcu, config):
+                print('Reset via hardware')
+        elif args.command in (
+                Comandos.DTR1.value,
+                Comandos.DTR0.value,
+                Comandos.RTS1.value,
+                Comandos.RTS0.value):
+            asr_controlar_linha_serial(args, asr_mcu, config)
         elif args.command == Comandos.SERIAL.value:
             sn = asr_serial_asr(args, asr_mcu, config)
             print('Serial: %s' % binascii.hexlify(sn))

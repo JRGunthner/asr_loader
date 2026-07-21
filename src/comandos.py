@@ -2,6 +2,7 @@ import binascii
 import os
 import pathlib
 import struct
+import time
 from typing import TypedDict
 from .constantes import EEPROM_ENDERECO_ASR6601CB, EEPROM_ENDERECO_ASR6601SE, EEPROM_SIZE, OTA_MAGIC
 from .ota_assinado import build_ota_assinado_package, crc32_ieee, default_key_header, parse_key_from_header, \
@@ -178,6 +179,59 @@ def asr_sw_reset(param, processador, config):
     if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return b''
     return processador.sw_reset(0)
+
+
+def asr_hw_reset(param, processador, config):
+    for porta in reversed(config.portas_disponiveis):
+        print("Serial port %s" % porta)
+        try:
+            processador.set_port(porta, param.baud)
+            processador.hw_reset(1 if param.boot else 0)
+            processador.ser.close()
+            return True
+        except Exception as excessao:
+            print("Nao foi possivel resetar via hardware em %s: %s" % (porta, excessao))
+    return False
+
+
+def asr_controlar_linha_serial(param, processador, config):
+    if param.hold is not None and param.hold < 0:
+        raise Exception('ERROR: --hold deve ser maior ou igual a zero')
+
+    for porta in reversed(config.portas_disponiveis):
+        print("Serial port %s" % porta)
+        try:
+            processador.set_port(porta, param.baud)
+            if param.control_line == 'dtr':
+                processador.set_dtr(param.control_state)
+            elif param.control_line == 'rts':
+                processador.set_rts(param.control_state)
+            else:
+                raise Exception('linha serial invalida: %s' % param.control_line)
+
+            print('%s=%d em %s' % (param.control_line.upper(), 1 if param.control_state else 0, porta))
+            if param.hold is None:
+                print('Mantendo a porta aberta. Pressione Ctrl+C para sair.')
+                while True:
+                    time.sleep(1)
+            elif param.hold > 0:
+                time.sleep(param.hold)
+
+            processador.ser.close()
+            return True
+        except KeyboardInterrupt:
+            print('')
+            if processador.ser is not None:
+                processador.ser.close()
+            return True
+        except Exception as excessao:
+            if processador.ser is not None:
+                try:
+                    processador.ser.close()
+                except OSError:
+                    pass
+            print("Nao foi possivel controlar linha em %s: %s" % (porta, excessao))
+    return False
 
 
 def asr_verify(param, processador, config):

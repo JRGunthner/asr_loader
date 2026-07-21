@@ -17,6 +17,8 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
   - [Baudrate: -b ou --baud](#baudrate--b-ou---baud)
   - [Modo log verboso: -v ou --verbose](#modo-log-verboso--v-ou---verbose)
   - [Timeout de conexão: -t ou --timeout](#timeout-de-conexão--t-ou---timeout)
+  - [Boot automático via DTR/RTS: --no-auto-boot](#boot-automático-via-dtrrts---no-auto-boot)
+  - [Tempos do boot automático: --boot-reset-delay e --boot-release-delay](#tempos-do-boot-automático---boot-reset-delay-e---boot-release-delay)
   - [Manter EEPROM: -e ou --eeprom](#manter-eeprom--e-ou---eeprom)
   - [Help: -h ou --help](#help--h-ou---help)
 - [Comandos](#comandos)
@@ -25,6 +27,8 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
   - [flash](#flash)
   - [verify](#verify)
   - [reset](#reset)
+  - [hw_reset](#hw_reset)
+  - [dtr1 / dtr0 / rts1 / rts0](#dtr1--dtr0--rts1--rts0)
   - [clear_eeprom](#clear_eeprom)
   - [serial](#serial)
   - [ota_pack](#ota_pack)
@@ -169,6 +173,54 @@ make -t 10 flash 0x08000000 app.bin
 ```
 ---
 
+### Boot automático via DTR/RTS: --no-auto-boot
+Por padrão, antes de conectar no bootloader, o ASR Loader aciona as linhas de controle da serial para colocar o MCU em modo de gravação.
+
+A sequência padrão é:
+
+1. ativa `DTR`;
+2. ativa `RTS`;
+3. aguarda `--boot-reset-delay`;
+4. libera `RTS`;
+5. aguarda `--boot-release-delay`;
+6. libera `DTR`;
+7. limpa os buffers da serial;
+8. envia o comando de sincronismo para o bootloader.
+
+Use a ligação de hardware correspondente ao seu circuito:
+
+- `RTS`: linha usada para reset do MCU;
+- `DTR`: linha usada para selecionar modo boot/gravação.
+
+Se o seu hardware já coloca o ASR manualmente em modo boot, ou se você estiver depurando a conexão, desative o acionamento automático:
+
+**Formato:**
+```text
+--no-auto-boot
+```
+
+**Exemplo:**
+```powershell
+make --no-auto-boot -p COM3 flash 0x08000000 app.bin
+```
+---
+
+### Tempos do boot automático: --boot-reset-delay e --boot-release-delay
+Configura os tempos da sequência automática de entrada no bootloader.
+Os valores são em segundos e o padrão é `0.1` para ambos.
+
+**Formato:**
+```text
+--boot-reset-delay <segundos>
+--boot-release-delay <segundos>
+```
+
+**Exemplo:**
+```powershell
+make --boot-reset-delay 0.2 --boot-release-delay 0.2 -p COM3 flash 0x08000000 app.bin
+```
+---
+
 ### Manter EEPROM: -e ou --eeprom
 Mantém os dados da EEPROM ao apagar a flash.
 
@@ -271,6 +323,7 @@ ou "ERROR: flash diferente do arquivo" se houver diferença.
 
 ### reset
 Reinicia o dispositivo.
+Este comando usa o comando de reset do bootloader, portanto precisa conseguir conectar no ASR antes.
 
 **Formato:**
 ```text
@@ -282,6 +335,55 @@ reset
 python asr_loader.py reset
 ```
 Reinicia o dispositivo conectado.
+
+---
+
+### hw_reset
+Reinicia o dispositivo via linha de hardware `RTS`, sem precisar sincronizar com o bootloader.
+
+**Formato:**
+```text
+hw_reset [--boot]
+```
+
+**Exemplo de reset normal:**
+```powershell
+python asr_loader.py -p COM3 hw_reset
+```
+
+**Exemplo de reset entrando no bootloader:**
+```powershell
+python asr_loader.py -p COM3 hw_reset --boot
+```
+
+No modo normal, o comando apenas pulsa `RTS`.
+Com `--boot`, o comando ativa `DTR`, pulsa `RTS` e depois libera `DTR`, usando os tempos configurados por `--boot-reset-delay` e `--boot-release-delay`.
+
+---
+
+### dtr1 / dtr0 / rts1 / rts0
+Controla diretamente as linhas `DTR` e `RTS` da porta serial para teste de hardware.
+
+**Formato:**
+```text
+dtr1 [--hold <segundos>]
+dtr0 [--hold <segundos>]
+rts1 [--hold <segundos>]
+rts0 [--hold <segundos>]
+```
+
+**Exemplos:**
+```powershell
+python asr_loader.py -p COM3 dtr1
+python asr_loader.py -p COM3 dtr0
+python asr_loader.py -p COM3 rts1 --hold 5
+python asr_loader.py -p COM3 rts0 --hold 5
+```
+
+Sem `--hold`, o comando mantém a porta aberta e a linha no estado selecionado até `Ctrl+C`.
+Com `--hold`, mantém pelo tempo informado e fecha a porta ao final.
+
+Observação: em adaptadores como CP2102 e nos circuitos de reset/boot com transistor, o nível elétrico medido no pino do MCU pode ficar invertido em relação ao estado lógico enviado pelo software. Para validar, meça diretamente no pino `DTR`/`RTS` do CP2102 e depois no ponto do circuito que chega ao MCU.
 
 ---
 

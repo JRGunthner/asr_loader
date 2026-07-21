@@ -112,18 +112,24 @@ class ASRLoader(object):
         if ret != 0:
             raise CmdExcessao("ERROR: nao foi possivel reiniciar")
 
+    def set_dtr(self, estado):
+        self.ser.set_dtr(estado)
+
+    def set_rts(self, estado):
+        self.ser.set_rts(estado)
+
     def hw_reset(self, mode=0):
         if mode:
-            self.ser.set_dtr(True)
-            self.ser.set_rts(True)
-            time.sleep(0.1)
-            self.ser.set_rts(False)
-            time.sleep(0.1)
-            self.ser.set_dtr(False)
+            self.set_dtr(True)
+            self.set_rts(True)
+            time.sleep(self.config.boot_reset_delay)
+            self.set_rts(False)
+            time.sleep(self.config.boot_release_delay)
+            self.set_dtr(False)
         else:
-            self.ser.set_rts(True)
-            time.sleep(0.1)
-            self.ser.set_rts(False)
+            self.set_rts(True)
+            time.sleep(self.config.boot_reset_delay)
+            self.set_rts(False)
 
     def serial_asr(self):
         self.enviar_cmd(CMD_SN)
@@ -174,7 +180,8 @@ class ASRLoader(object):
 
         for _ in range(retentativas):
             try:
-                self.hw_reset(1)
+                if self.config.auto_boot:
+                    self.hw_reset(1)
                 last_error = None
                 self.ser.flush_input()
                 self.ser.flush_output()
