@@ -20,6 +20,11 @@
 - Adição do comando `hw_reset` para pulsar reset via `RTS` sem precisar sincronizar com o bootloader, com opção `--boot` para acionar `DTR` durante o reset.
 - Adição dos comandos `dtr1`, `dtr0`, `rts1` e `rts0` para testar diretamente as linhas de controle da serial, com opção `--hold`.
 - Documentação no `README.md` do uso de `DTR/RTS`, comandos de teste das linhas e diferenças entre `reset` via software e `hw_reset` via hardware.
+- Adição do comando `diag` para coletar versão, ambiente Python, `pyserial` e detalhes das portas seriais, com opção `--json`.
+- Correção do registro do comando `clear_eeprom` no parser da CLI.
+- Correção da comparação dos comandos `ota_cript` e `ota_cript_verify` na CLI.
+- Correção de saída hexadecimal para serial e leitura de registrador.
+- Correção do tratamento de erro em `build.py` ao executar comandos externos.
 
 ## v1.2 - 2025-10-07
 - Estruturação modular da aplicação em `src/`, separando CLI, comandos, protocolo, constantes, utilitários e runtime.

@@ -31,6 +31,7 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
   - [dtr1 / dtr0 / rts1 / rts0](#dtr1--dtr0--rts1--rts0)
   - [clear_eeprom](#clear_eeprom)
   - [serial](#serial)
+  - [diag](#diag)
   - [ota_pack](#ota_pack)
   - [ota_pack_verify](#ota_pack_verify)
   - [ota_pack_inspect](#ota_pack_inspect)
@@ -420,6 +421,29 @@ python asr_loader.py serial
 ```
 Retorna o número de serial do dispositivo com 16 bytes.
 Exemplo de saída: `0123456789abcdef`
+
+---
+
+### diag
+Mostra informações úteis para desenvolvimento e depuração sem conectar no bootloader.
+Inclui versão do ASR Loader, data/fonte do build, Python em uso, versão do `pyserial` e detalhes das portas seriais detectadas.
+
+**Formato:**
+```text
+diag [--json]
+```
+
+**Exemplo:**
+```powershell
+python asr_loader.py diag
+```
+
+**Exemplo em JSON:**
+```powershell
+python asr_loader.py diag --json
+```
+
+Use esse comando ao abrir um reporte de problema de gravação, porta COM ou driver USB-serial.
 
 ---
 

@@ -49,7 +49,7 @@ def executar_comando(comando, descricao):
         print("✅ Sucesso!")
         return True
     except subprocess.CalledProcessError as excessao:
-        print(f"❌ Erro: {e}")
+        print(f"❌ Erro: {excessao}")
         if excessao.stderr:
             print(f"   Erro: {excessao.stderr}")
         return False

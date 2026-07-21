@@ -18,6 +18,26 @@ def get_lista_portas_com():
     return sorted(porta.device for porta in list_ports.comports())
 
 
+"""Retorna detalhes das portas seriais disponíveis para diagnóstico."""
+def get_lista_portas_info():
+    portas = []
+    for porta in list_ports.comports():
+        portas.append({
+            'device': porta.device,
+            'name': porta.name,
+            'description': porta.description,
+            'hwid': porta.hwid,
+            'vid': porta.vid,
+            'pid': porta.pid,
+            'serial_number': porta.serial_number,
+            'location': porta.location,
+            'manufacturer': porta.manufacturer,
+            'product': porta.product,
+            'interface': porta.interface,
+        })
+    return sorted(portas, key=lambda item: item['device'] or '')
+
+
 """Exibe as portas seriais disponíveis em ordem inversa."""
 def get_dispositivo_conectado(lista_portas):
     for each_port in reversed(lista_portas):

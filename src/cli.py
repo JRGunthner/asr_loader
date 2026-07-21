@@ -1,10 +1,13 @@
 import argparse
 import binascii
+import json
+import platform
 import struct
 import sys
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
+import serial
 from .comandos import (
     asr_clean_eeprom,
     asr_controlar_linha_serial,
@@ -36,7 +39,7 @@ from .comandos import (
 from .constantes import BAUD_DEFAULT, TIMEOUT_DEFAULT, VERSAO_GRAVADOR
 from .ASRLoader import ASRLoader
 from .runtime import RuntimeConfig
-from .utils import arg_int, get_lista_portas_com
+from .utils import arg_int, get_lista_portas_com, get_lista_portas_info
 
 
 class Comandos(str, Enum):
@@ -52,6 +55,7 @@ class Comandos(str, Enum):
     RTS0 = 'rts0'
     CLEAR_EEPROM = 'clear_eeprom'
     SERIAL = 'serial'
+    DIAG = 'diag'
 
     OTA_PACK = 'ota_pack'
     OTA_PACK_VERIFY = 'ota_pack_verify'
@@ -99,6 +103,7 @@ class Argumentos(str, Enum):
     ADDR_FILE = 'addr_file'
     KEY_HEADER = 'key_header'
     FIRMWARE_VERSION = 'firmware_version'
+    JSON = 'json'
 
 
 class Opcoes(Enum):
@@ -142,6 +147,56 @@ def cli_obter_data_build():
             caminho_build = Path(__file__).resolve()
 
     return caminho_build.stat().st_mtime_ns // 1_000_000_000, caminho_build
+
+
+def cli_montar_diagnostico():
+    timestamp, caminho_build = cli_obter_data_build()
+    return {
+        'app': 'ASR Loader',
+        'version': VERSAO_GRAVADOR,
+        'build_date': datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S'),
+        'build_source': str(caminho_build),
+        'cwd': str(Path.cwd()),
+        'python': {
+            'version': sys.version.replace('\n', ' '),
+            'executable': sys.executable,
+            'platform': platform.platform(),
+        },
+        'pyserial': getattr(serial, '__version__', 'desconhecido'),
+        'ports': get_lista_portas_info(),
+    }
+
+
+def cli_printar_diagnostico(args):
+    diagnostico = cli_montar_diagnostico()
+    if args.json:
+        print(json.dumps(diagnostico, indent=2, ensure_ascii=False))
+        return
+
+    print('%s v%s' % (diagnostico['app'], diagnostico['version']))
+    print('Build     : %s' % diagnostico['build_date'])
+    print('Fonte     : %s' % diagnostico['build_source'])
+    print('Diretorio : %s' % diagnostico['cwd'])
+    print('Python    : %s' % diagnostico['python']['version'])
+    print('Executavel: %s' % diagnostico['python']['executable'])
+    print('Plataforma: %s' % diagnostico['python']['platform'])
+    print('pyserial  : %s' % diagnostico['pyserial'])
+    print('')
+    print('Portas seriais:')
+    if not diagnostico['ports']:
+        print('  Nenhuma porta serial encontrada')
+        return
+
+    for porta in diagnostico['ports']:
+        vid = ('0x%04X' % porta['vid']) if porta['vid'] is not None else ''
+        pid = ('0x%04X' % porta['pid']) if porta['pid'] is not None else ''
+        vid_pid = '%s/%s' % (vid, pid) if vid or pid else ''
+        print('  %s' % porta['device'])
+        print('    Descricao : %s' % (porta['description'] or ''))
+        print('    HWID      : %s' % (porta['hwid'] or ''))
+        print('    VID/PID   : %s' % vid_pid)
+        print('    Fabricante: %s' % (porta['manufacturer'] or ''))
+        print('    Produto   : %s' % (porta['product'] or ''))
 
 
 def cli_adicionar_argumentos(argumentos):
@@ -204,6 +259,9 @@ def cli_build_parser():
 
     subparsers.add_parser(Comandos.LER_OPT1.value, help='ler a area opt1 da flash')
     subparsers.add_parser(Comandos.SERIAL.value, help='ler o serial do ASR')
+    parser_diag = subparsers.add_parser(Comandos.DIAG.value, help='mostra diagnostico do ambiente e portas seriais')
+    parser_diag.add_argument('--json', dest=Argumentos.JSON.value, action='store_true',
+                             help='imprime o diagnostico em JSON')
     subparsers.add_parser(Comandos.RESET.value, help='resetar o ASR')
     parser_hw_reset = subparsers.add_parser(Comandos.HW_RESET.value,
                                             help='resetar o ASR via linha RTS sem conectar no bootloader')
@@ -286,6 +344,7 @@ def cli_build_parser():
     parser_ota_cript_verify.add_argument('--key-header', dest=Argumentos.KEY_HEADER.value,
                                          help='header C com BOOT_SECURITY_KEY_BYTES')
 
+    subparsers.add_parser(Comandos.CLEAR_EEPROM.value, help='apagar a eeprom emulada')
     subparsers.add_parser(Comandos.HELP.value, help='mostra essa mensagem de ajuda e sai')
     subparsers.add_parser(Comandos.VERSAO.value, help='mostra a versao do ASR Loader')
 
@@ -308,6 +367,9 @@ def main(argv=None):
             if args.verbose:
                 print('Build source: %s' % caminho_build)
             return
+        if args.command == Comandos.DIAG.value:
+            cli_printar_diagnostico(args)
+            return
         if args.command == Comandos.OTA_PACK.value:
             asr_ota_pack(args)
             print('Pacote OTA gerado com sucesso')
@@ -327,11 +389,11 @@ def main(argv=None):
             asr_ota_assinado_verify(args)
             print('Pacote OTA assinado verificado com sucesso')
             return
-        if args.command in Comandos.OTA_CRIPT.value:
+        if args.command == Comandos.OTA_CRIPT.value:
             asr_ota_cript(args)
             print('Pacote OTA criptografado gerado com sucesso')
             return
-        if args.command in Comandos.OTA_CRIPT_VERIFY.value:
+        if args.command == Comandos.OTA_CRIPT_VERIFY.value:
             asr_ota_ota_verify(args)
             print('Pacote OTA validado com sucesso')
             return
@@ -400,13 +462,13 @@ def main(argv=None):
             asr_controlar_linha_serial(args, asr_mcu, config)
         elif args.command == Comandos.SERIAL.value:
             sn = asr_serial_asr(args, asr_mcu, config)
-            print('Serial: %s' % binascii.hexlify(sn))
+            print('Serial: %s' % sn.hex())
         elif args.command == Comandos.ESCREVER_REG.value:
             asr_escrever_reg(args, asr_mcu, config)
             print('Registrador escrito com sucesso')
         elif args.command == Comandos.LER_REG.value:
             valor_reg = asr_ler_reg(args, asr_mcu, config)
-            print('Valor do registrador: 0x%s' % valor_reg[0])
+            print('Valor do registrador: 0x%08X' % valor_reg[0])
         elif args.command == Comandos.LER_MEM.value:
             asr_ler_mem(args, asr_mcu, config)
         elif args.command == Comandos.VERSAO_BOOTLOADER.value:

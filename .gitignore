@@ -2,3 +2,7 @@
 /build
 /dist
 /teste-build
+__pycache__/
+*.py[cod]
+*.spec
+.pytest_cache/
