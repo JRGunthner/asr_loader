@@ -30,6 +30,7 @@ from .comandos import (
     asr_ota_assinado_verify,
     asr_ota_cript,
     asr_ota_ota_verify,
+    asr_probe,
     asr_serial_asr,
     asr_hw_reset,
     asr_sw_reset,
@@ -56,6 +57,7 @@ class Comandos(str, Enum):
     CLEAR_EEPROM = 'clear_eeprom'
     SERIAL = 'serial'
     DIAG = 'diag'
+    PROBE = 'probe'
 
     OTA_PACK = 'ota_pack'
     OTA_PACK_VERIFY = 'ota_pack_verify'
@@ -104,6 +106,7 @@ class Argumentos(str, Enum):
     KEY_HEADER = 'key_header'
     FIRMWARE_VERSION = 'firmware_version'
     JSON = 'json'
+    LOG_FILE = 'log_file'
 
 
 class Opcoes(Enum):
@@ -213,6 +216,8 @@ def cli_adicionar_argumentos(argumentos):
     argumentos.add_argument('--boot-release-delay',
                             help='tempo em segundos antes de liberar o modo boot via DTR, default 0.1s',
                             type=float, default=0.1)
+    argumentos.add_argument('--log-file', dest=Argumentos.LOG_FILE.value,
+                            help='arquivo para salvar diagnostico da execucao e pacotes TX/RX')
 
 
 def cli_adicionar_comando_linha_serial(subparsers, comando, linha, estado):
@@ -262,6 +267,8 @@ def cli_build_parser():
     parser_diag = subparsers.add_parser(Comandos.DIAG.value, help='mostra diagnostico do ambiente e portas seriais')
     parser_diag.add_argument('--json', dest=Argumentos.JSON.value, action='store_true',
                              help='imprime o diagnostico em JSON')
+    subparsers.add_parser(Comandos.PROBE.value,
+                          help='testa entrada no bootloader e sincronismo sem apagar ou gravar')
     subparsers.add_parser(Comandos.RESET.value, help='resetar o ASR')
     parser_hw_reset = subparsers.add_parser(Comandos.HW_RESET.value,
                                             help='resetar o ASR via linha RTS sem conectar no bootloader')
@@ -354,11 +361,12 @@ def cli_build_parser():
 def main(argv=None):
     parser = cli_build_parser()
     args = parser.parse_args(argv)
+    config = None
 
     try:
         if args.command is None or args.command == Comandos.HELP.value:
             cli_printar_help(parser)
-            return
+            return 0
         if args.command == Comandos.VERSAO.value:
             timestamp, caminho_build = cli_obter_data_build()
             data_build = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
@@ -366,37 +374,37 @@ def main(argv=None):
             print('%s' % data_build)
             if args.verbose:
                 print('Build source: %s' % caminho_build)
-            return
+            return 0
         if args.command == Comandos.DIAG.value:
             cli_printar_diagnostico(args)
-            return
+            return 0
         if args.command == Comandos.OTA_PACK.value:
             asr_ota_pack(args)
             print('Pacote OTA gerado com sucesso')
-            return
+            return 0
         if args.command == Comandos.OTA_PACK_VERIFY.value:
             asr_ota_pack_verify(args)
             print('Pacote OTA verificado com sucesso')
-            return
+            return 0
         if args.command == Comandos.OTA_PACK_INSPECT.value:
             asr_ota_pack_inspect(args)
-            return
+            return 0
         if args.command == Comandos.OTA_ASSINADO.value:
             asr_ota_assinado(args)
             print('Pacote OTA assinado gerado com sucesso')
-            return
+            return 0
         if args.command == Comandos.OTA_ASSINADO_VERIFY.value:
             asr_ota_assinado_verify(args)
             print('Pacote OTA assinado verificado com sucesso')
-            return
+            return 0
         if args.command == Comandos.OTA_CRIPT.value:
             asr_ota_cript(args)
             print('Pacote OTA criptografado gerado com sucesso')
-            return
+            return 0
         if args.command == Comandos.OTA_CRIPT_VERIFY.value:
             asr_ota_ota_verify(args)
             print('Pacote OTA validado com sucesso')
-            return
+            return 0
 
         if args.boot_reset_delay < 0 or args.boot_release_delay < 0:
             raise Exception('ERROR: os tempos de boot automatico devem ser maiores ou iguais a zero')
@@ -410,7 +418,15 @@ def main(argv=None):
             auto_boot=not args.no_auto_boot,
             boot_reset_delay=args.boot_reset_delay,
             boot_release_delay=args.boot_release_delay,
+            log_file=args.log_file,
         )
+        config.log('command=%s argv=%s baud=%d timeout=%s portas=%s' % (
+            args.command,
+            argv if argv is not None else sys.argv[1:],
+            args.baud,
+            args.timeout,
+            ','.join(config.portas_disponiveis),
+        ))
 
         if args.port is None:
             print("Encontrado %d serial ports" % len(config.portas_disponiveis))
@@ -451,9 +467,12 @@ def main(argv=None):
         elif args.command == Comandos.RESET.value:
             asr_sw_reset(args, asr_mcu, config)
             print('Reset via software')
+        elif args.command == Comandos.PROBE.value:
+            asr_probe(args, asr_mcu, config)
+            print('Probe concluido: bootloader respondeu')
         elif args.command == Comandos.HW_RESET.value:
-            if asr_hw_reset(args, asr_mcu, config):
-                print('Reset via hardware')
+            asr_hw_reset(args, asr_mcu, config)
+            print('Reset via hardware')
         elif args.command in (
                 Comandos.DTR1.value,
                 Comandos.DTR0.value,
@@ -482,5 +501,12 @@ def main(argv=None):
             print('Eeprom emulada apagada com sucesso')
         else:
             cli_printar_help(parser)
+        return 0
     except Exception as excessao:
-        print(str(excessao))
+        if config is not None:
+            config.log('ERROR: %s' % excessao)
+        print(str(excessao), file=sys.stderr)
+        return 1
+    finally:
+        if config is not None:
+            config.close_log()

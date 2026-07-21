@@ -114,11 +114,18 @@ class ASRLoader(object):
 
     def set_dtr(self, estado):
         self.ser.set_dtr(estado)
+        self.config.log('DTR=%d' % (1 if estado else 0))
 
     def set_rts(self, estado):
         self.ser.set_rts(estado)
+        self.config.log('RTS=%d' % (1 if estado else 0))
 
     def hw_reset(self, mode=0):
+        self.config.log('hw_reset mode=%d reset_delay=%.3f release_delay=%.3f' % (
+            mode,
+            self.config.boot_reset_delay,
+            self.config.boot_release_delay,
+        ))
         if mode:
             self.set_dtr(True)
             self.set_rts(True)
@@ -152,19 +159,23 @@ class ASRLoader(object):
         return struct.unpack('<I', rsp)
 
     def set_baudrate(self, baud):
+        self.config.log('set_baudrate solicitando baud=%d' % baud)
         self.enviar_cmd(CMD_BAUDRATE, struct.pack('<I', baud))
         ret, _ = self.aguardar_resposta()
         if ret != 0:
             raise CmdExcessao("ERROR: nao foi possivel alterar o baud")
 
         try:
-            print("baud", baud)
+            if self.config.verbose:
+                print("baud", baud)
             self.ser.baudrate = baud
+            self.config.log('set_baudrate aplicado baud=%d' % baud)
         except IOError:
             raise CmdExcessao("ERROR: nao foi possivel alterar o baud")
 
     def set_port(self, port, baud=BAUD_DEFAULT):
         self.ser = SerialPort(port, baud, timeout=self.config.com_timeout)
+        self.config.log('porta aberta port=%s baud=%d timeout=%s' % (self.ser.port, baud, self.config.com_timeout))
 
     def versao_bootloader(self):
         self.enviar_cmd(CMD_VERSION)
@@ -175,11 +186,17 @@ class ASRLoader(object):
 
     def conectar(self, retentativas=3):
         print('Conectando em %s...' % self.ser.port)
+        self.config.log('conectar port=%s retentativas=%d auto_boot=%s' % (
+            self.ser.port,
+            retentativas,
+            self.config.auto_boot,
+        ))
         sys.stdout.flush()
         last_error = None
 
-        for _ in range(retentativas):
+        for tentativa in range(1, retentativas + 1):
             try:
+                self.config.log('tentativa_conexao=%d' % tentativa)
                 if self.config.auto_boot:
                     self.hw_reset(1)
                 last_error = None
@@ -191,12 +208,15 @@ class ASRLoader(object):
                 sys.stdout.flush()
                 time.sleep(0.05)
                 last_error = excessao
+                self.config.log('tentativa_conexao=%d erro=%s' % (tentativa, excessao))
 
         if last_error is not None:
             self.ser.close()
             print('Falha na conexao')
+            self.config.log('falha_conexao erro=%s' % last_error)
             raise CmdExcessao('Erro de conexao: %s' % last_error)
         print('Conectado. ', end='')
+        self.config.log('conectado port=%s' % self.ser.port)
         if self.config.verbose:
             print("\n")
 
@@ -207,6 +227,7 @@ class ASRLoader(object):
 
         if self.config.verbose:
             print('Tx[%d]:' % len(pkt), binascii.hexlify(pkt))
+        self.config.log('Tx[%d]: %s' % (len(pkt), binascii.hexlify(pkt).decode('ascii')))
 
         self.ser.flush_input()
         self.ser.write(pkt)
@@ -214,6 +235,7 @@ class ASRLoader(object):
     def aguardar_resposta(self):
         header = self.ser.read(4)
         if header == b'':
+            self.config.log('Rx timeout header')
             raise CmdExcessao("ERROR: timeout leitura do header response")
         start, status, rsp_data_len = struct.unpack('<BBH', header)
         if start != 0xFE:
@@ -223,12 +245,14 @@ class ASRLoader(object):
 
         remain_data = self.ser.read(rsp_data_len + 5)
         if remain_data == b'':
+            self.config.log('Rx timeout dados')
             raise CmdExcessao("ERROR: timeout leitura de dados")
 
         pkt = header + remain_data
 
         if self.config.verbose:
             print('Rx[%d]:' % len(pkt), binascii.hexlify(pkt))
+        self.config.log('Rx[%d]: %s' % (len(pkt), binascii.hexlify(pkt).decode('ascii')))
 
         crc, end = struct.unpack('<IB', pkt[4 + rsp_data_len:])
 

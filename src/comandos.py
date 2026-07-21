@@ -5,6 +5,7 @@ import struct
 import time
 from typing import TypedDict
 from .constantes import EEPROM_ENDERECO_ASR6601CB, EEPROM_ENDERECO_ASR6601SE, EEPROM_SIZE, OTA_MAGIC
+from .exceptions import CmdExcessao
 from .ota_assinado import build_ota_assinado_package, crc32_ieee, default_key_header, parse_key_from_header, \
     ota_assinado_verify_package, append_ota_tche_sufixo, split_ota_tche_sufixo
 from .ota_pacote_cripto import caminho_saida_segura_padrao, montar_pacote_seguro, verificar_pacote_seguro
@@ -14,6 +15,16 @@ ASR_APP_FLASH_START = 0x08000000
 ASR_APP_FLASH_END = 0x08040000
 ARM_SRAM_START = 0x20000000
 ARM_SRAM_END = 0x40000000
+
+
+def asr_fechar_porta(processador):
+    if processador.ser is None:
+        return
+    try:
+        processador.ser.close()
+    except OSError:
+        pass
+    processador.ser = None
 
 
 class AsrOtaPackInfo(TypedDict):
@@ -27,6 +38,10 @@ class AsrOtaPackInfo(TypedDict):
 
 
 def asr_conectar(processador, lista_portas, baud):
+    if not lista_portas:
+        raise CmdExcessao('ERROR: nenhuma porta serial disponivel')
+
+    erros = []
     for porta in reversed(lista_portas):
         print("Serial port %s" % porta)
         try:
@@ -36,7 +51,9 @@ def asr_conectar(processador, lista_portas, baud):
             return True
         except Exception as excessao:
             print("Nao foi possivel conectar em %s: %s" % (porta, excessao))
-    return False
+            erros.append('%s: %s' % (porta, excessao))
+            asr_fechar_porta(processador)
+    raise CmdExcessao('ERROR: nao foi possivel conectar (%s)' % '; '.join(erros))
 
 
 def asr_erase(param, processador, config):
@@ -182,22 +199,32 @@ def asr_sw_reset(param, processador, config):
 
 
 def asr_hw_reset(param, processador, config):
+    if not config.portas_disponiveis:
+        raise CmdExcessao('ERROR: nenhuma porta serial disponivel')
+
+    erros = []
     for porta in reversed(config.portas_disponiveis):
         print("Serial port %s" % porta)
         try:
             processador.set_port(porta, param.baud)
             processador.hw_reset(1 if param.boot else 0)
-            processador.ser.close()
+            asr_fechar_porta(processador)
             return True
         except Exception as excessao:
             print("Nao foi possivel resetar via hardware em %s: %s" % (porta, excessao))
-    return False
+            erros.append('%s: %s' % (porta, excessao))
+            asr_fechar_porta(processador)
+    raise CmdExcessao('ERROR: nao foi possivel resetar via hardware (%s)' % '; '.join(erros))
 
 
 def asr_controlar_linha_serial(param, processador, config):
     if param.hold is not None and param.hold < 0:
         raise Exception('ERROR: --hold deve ser maior ou igual a zero')
 
+    if not config.portas_disponiveis:
+        raise CmdExcessao('ERROR: nenhuma porta serial disponivel')
+
+    erros = []
     for porta in reversed(config.portas_disponiveis):
         print("Serial port %s" % porta)
         try:
@@ -217,21 +244,22 @@ def asr_controlar_linha_serial(param, processador, config):
             elif param.hold > 0:
                 time.sleep(param.hold)
 
-            processador.ser.close()
+            asr_fechar_porta(processador)
             return True
         except KeyboardInterrupt:
             print('')
-            if processador.ser is not None:
-                processador.ser.close()
+            asr_fechar_porta(processador)
             return True
         except Exception as excessao:
-            if processador.ser is not None:
-                try:
-                    processador.ser.close()
-                except OSError:
-                    pass
+            asr_fechar_porta(processador)
             print("Nao foi possivel controlar linha em %s: %s" % (porta, excessao))
-    return False
+            erros.append('%s: %s' % (porta, excessao))
+    raise CmdExcessao('ERROR: nao foi possivel controlar linha serial (%s)' % '; '.join(erros))
+
+
+def asr_probe(param, processador, config):
+    asr_conectar(processador, config.portas_disponiveis, param.baud)
+    return True
 
 
 def asr_verify(param, processador, config):

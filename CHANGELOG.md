@@ -25,6 +25,10 @@
 - Correção da comparação dos comandos `ota_cript` e `ota_cript_verify` na CLI.
 - Correção de saída hexadecimal para serial e leitura de registrador.
 - Correção do tratamento de erro em `build.py` ao executar comandos externos.
+- Comandos da CLI passam a retornar código de saída `1` em falhas tratadas, facilitando uso em scripts e CI.
+- Adição da opção global `--log-file` para registrar porta usada, sequência `DTR/RTS`, pacotes `TX/RX` e erros.
+- Adição do comando `probe` para testar auto boot e sincronismo sem apagar ou gravar a flash.
+- Adição de testes automatizados sem hardware para parser da CLI e geração/verificação de pacotes OTA.
 
 ## v1.2 - 2025-10-07
 - Estruturação modular da aplicação em `src/`, separando CLI, comandos, protocolo, constantes, utilitários e runtime.

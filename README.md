@@ -16,6 +16,7 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
   - [COM PORT: -p ou --port](#com-port--p-ou---port)
   - [Baudrate: -b ou --baud](#baudrate--b-ou---baud)
   - [Modo log verboso: -v ou --verbose](#modo-log-verboso--v-ou---verbose)
+  - [Salvar log em arquivo: --log-file](#salvar-log-em-arquivo---log-file)
   - [Timeout de conexão: -t ou --timeout](#timeout-de-conexão--t-ou---timeout)
   - [Boot automático via DTR/RTS: --no-auto-boot](#boot-automático-via-dtrrts---no-auto-boot)
   - [Tempos do boot automático: --boot-reset-delay e --boot-release-delay](#tempos-do-boot-automático---boot-reset-delay-e---boot-release-delay)
@@ -32,6 +33,7 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
   - [clear_eeprom](#clear_eeprom)
   - [serial](#serial)
   - [diag](#diag)
+  - [probe](#probe)
   - [ota_pack](#ota_pack)
   - [ota_pack_verify](#ota_pack_verify)
   - [ota_pack_inspect](#ota_pack_inspect)
@@ -70,6 +72,11 @@ Ela é especialmente útil para desenvolvedores que trabalham com microcontrolad
 4. Instale as dependências necessárias usando o comando:
 ```powershell
 pip install -r requirements.txt
+```
+
+Para executar os testes automatizados sem hardware:
+```powershell
+py -m unittest discover -s tests
 ```
 ---
 
@@ -157,6 +164,23 @@ Configura modo verboso. Mostra todos os dados trafegados pela serial.
 ```powershell
 make -v flash 0x08000000 app.bin
 ```
+---
+
+### Salvar log em arquivo: --log-file
+Salva em arquivo os principais eventos da execução, incluindo porta usada, parâmetros de conexão, sequência `DTR/RTS`, pacotes `TX/RX` e erros.
+
+**Formato:**
+```text
+--log-file <arquivo.log>
+```
+
+**Exemplo:**
+```powershell
+python asr_loader.py -p COM3 --log-file debug_gravacao.log probe
+```
+
+Esse log é indicado para depurar bancada, timing de auto boot e falhas intermitentes de comunicação.
+
 ---
 
 ### Timeout de conexão: -t ou --timeout
@@ -444,6 +468,29 @@ python asr_loader.py diag --json
 ```
 
 Use esse comando ao abrir um reporte de problema de gravação, porta COM ou driver USB-serial.
+
+---
+
+### probe
+Testa entrada no bootloader e sincronismo sem apagar, gravar ou alterar memória flash.
+É o primeiro comando recomendado para validar o circuito de auto boot e a comunicação serial.
+
+**Formato:**
+```text
+probe
+```
+
+**Exemplo:**
+```powershell
+python asr_loader.py -p COM3 probe
+```
+
+**Exemplo com log:**
+```powershell
+python asr_loader.py -p COM3 --log-file probe.log probe
+```
+
+Retorna código de saída `0` se o bootloader responder e `1` se houver falha.
 
 ---
 
@@ -1235,6 +1282,8 @@ Exemplo de saída: `ASR_Loader: v1.0 (2024-06-01)`
 
 - Para listar as portas seriais disponíveis, basta executar sem o parâmetro `--port`.
 - Use o parâmetro `--verbose` ou `-v` para obter mais detalhes da comunicação.
+- Comandos concluídos com sucesso retornam código de saída `0`; falhas retornam código `1`.
+- Para depurar problemas de conexão, rode primeiro `diag`, depois `probe` com `--log-file`.
 
 ---
 
