@@ -7,6 +7,10 @@ EEPROM_ENDERECO_ASR6601CB = OFFSET_EEPROM_CB  # Endereço inicial da eeprom emul
 EEPROM_ENDERECO_ASR6601SE = OFFSET_EEPROM_SE  # Endereço inicial da eeprom emulada na flash
 EEPROM_SIZE = 512  # Tamanho da eeprom emulada na flash
 OTA_MAGIC = 0xB00710AD # Valor para identificar o formato do firmware OTA
+ASR_APP_FLASH_START = 0x08000000
+ASR_APP_FLASH_END = 0x08040000
+ARM_SRAM_START = 0x20000000
+ARM_SRAM_END = 0x40000000
 
 CMD_SYNC = 1
 CMD_JUMP = 2

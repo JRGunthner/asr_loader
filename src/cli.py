@@ -1,5 +1,7 @@
 import argparse
 import binascii
+import contextlib
+import io
 import json
 import platform
 import struct
@@ -7,15 +9,18 @@ import sys
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
+from typing import Dict, List, cast
 import serial
 from .comandos import (
     asr_clean_eeprom,
     asr_controlar_linha_serial,
     asr_erase,
+    asr_fechar_porta,
     asr_escrever_opt0,
     asr_escrever_opt1,
     asr_escrever_otp,
     asr_escrever_reg,
+    asr_firmware_inspect,
     asr_flash,
     asr_jump,
     asr_ler_opt0,
@@ -31,13 +36,16 @@ from .comandos import (
     asr_ota_cript,
     asr_ota_ota_verify,
     asr_probe,
+    asr_probe_sweep,
+    asr_preflight_flash,
     asr_serial_asr,
     asr_hw_reset,
+    asr_snapshot,
     asr_sw_reset,
     asr_verify,
     asr_versao_bootloader,
 )
-from .constantes import BAUD_DEFAULT, TIMEOUT_DEFAULT, VERSAO_GRAVADOR
+from .constantes import ASR_APP_FLASH_START, BAUD_DEFAULT, TIMEOUT_DEFAULT, VERSAO_GRAVADOR
 from .ASRLoader import ASRLoader
 from .runtime import RuntimeConfig
 from .utils import arg_int, get_lista_portas_com, get_lista_portas_info
@@ -58,6 +66,10 @@ class Comandos(str, Enum):
     SERIAL = 'serial'
     DIAG = 'diag'
     PROBE = 'probe'
+    DOCTOR = 'doctor'
+    PREFLIGHT = 'preflight'
+    FIRMWARE_INSPECT = 'firmware_inspect'
+    SNAPSHOT = 'snapshot'
 
     OTA_PACK = 'ota_pack'
     OTA_PACK_VERIFY = 'ota_pack_verify'
@@ -107,6 +119,15 @@ class Argumentos(str, Enum):
     FIRMWARE_VERSION = 'firmware_version'
     JSON = 'json'
     LOG_FILE = 'log_file'
+    TRACE_JSON = 'trace_json'
+    BASE_ADDRESS = 'base_address'
+    PROFILE = 'profile'
+    STRICT = 'strict'
+    STRICT_APP_RANGE = 'strict_app_range'
+    SWEEP = 'sweep'
+    SWEEP_BAUDS = 'sweep_bauds'
+    SWEEP_RESET_DELAYS = 'sweep_reset_delays'
+    SWEEP_RELEASE_DELAYS = 'sweep_release_delays'
 
 
 class Opcoes(Enum):
@@ -176,6 +197,7 @@ def cli_printar_diagnostico(args):
         print(json.dumps(diagnostico, indent=2, ensure_ascii=False))
         return
 
+    portas = cast(List[Dict[str, object]], diagnostico['ports'])
     print('%s v%s' % (diagnostico['app'], diagnostico['version']))
     print('Build     : %s' % diagnostico['build_date'])
     print('Fonte     : %s' % diagnostico['build_source'])
@@ -186,20 +208,22 @@ def cli_printar_diagnostico(args):
     print('pyserial  : %s' % diagnostico['pyserial'])
     print('')
     print('Portas seriais:')
-    if not diagnostico['ports']:
+    if not portas:
         print('  Nenhuma porta serial encontrada')
         return
 
-    for porta in diagnostico['ports']:
-        vid = ('0x%04X' % porta['vid']) if porta['vid'] is not None else ''
-        pid = ('0x%04X' % porta['pid']) if porta['pid'] is not None else ''
+    for porta_info in portas:
+        vid_valor = porta_info.get('vid')
+        pid_valor = porta_info.get('pid')
+        vid = ('0x%04X' % vid_valor) if isinstance(vid_valor, int) else ''
+        pid = ('0x%04X' % pid_valor) if isinstance(pid_valor, int) else ''
         vid_pid = '%s/%s' % (vid, pid) if vid or pid else ''
-        print('  %s' % porta['device'])
-        print('    Descricao : %s' % (porta['description'] or ''))
-        print('    HWID      : %s' % (porta['hwid'] or ''))
+        print('  %s' % porta_info.get('device', ''))
+        print('    Descricao : %s' % (porta_info.get('description') or ''))
+        print('    HWID      : %s' % (porta_info.get('hwid') or ''))
         print('    VID/PID   : %s' % vid_pid)
-        print('    Fabricante: %s' % (porta['manufacturer'] or ''))
-        print('    Produto   : %s' % (porta['product'] or ''))
+        print('    Fabricante: %s' % (porta_info.get('manufacturer') or ''))
+        print('    Produto   : %s' % (porta_info.get('product') or ''))
 
 
 def cli_adicionar_argumentos(argumentos):
@@ -218,6 +242,8 @@ def cli_adicionar_argumentos(argumentos):
                             type=float, default=0.1)
     argumentos.add_argument('--log-file', dest=Argumentos.LOG_FILE.value,
                             help='arquivo para salvar diagnostico da execucao e pacotes TX/RX')
+    argumentos.add_argument('--trace-json', dest=Argumentos.TRACE_JSON.value,
+                            help='arquivo JSON Lines para trace estruturado de comandos e TX/RX')
 
 
 def cli_adicionar_comando_linha_serial(subparsers, comando, linha, estado):
@@ -226,6 +252,85 @@ def cli_adicionar_comando_linha_serial(subparsers, comando, linha, estado):
     parser_linha.add_argument('--hold', dest=Argumentos.HOLD.value, type=float,
                               help='tempo em segundos mantendo a porta aberta; sem este parametro, aguarda Ctrl+C')
     parser_linha.set_defaults(control_line=linha, control_state=estado)
+
+
+def cli_montar_doctor(args, config, processador):
+    diagnostico = cli_montar_diagnostico()
+    portas_info = cast(List[Dict[str, object]], diagnostico['ports'])
+    portas = [str(porta.get('device')) for porta in portas_info if porta.get('device')]
+    checks = [{
+        'name': 'pyserial',
+        'status': 'pass' if diagnostico['pyserial'] != 'desconhecido' else 'warn',
+        'detail': diagnostico['pyserial'],
+    }, {
+        'name': 'portas_seriais',
+        'status': 'pass' if portas else 'fail',
+        'detail': '%d porta(s) detectada(s)' % len(portas),
+    }]
+
+    if args.port is not None:
+        checks.append({
+            'name': 'porta_selecionada',
+            'status': 'pass' if args.port in portas else 'warn',
+            'detail': args.port,
+        })
+    checks.append({
+        'name': 'auto_boot',
+        'status': 'pass' if config.auto_boot else 'warn',
+        'detail': 'reset=%.3fs release=%.3fs' % (config.boot_reset_delay, config.boot_release_delay),
+    })
+
+    if args.probe:
+        try:
+            if args.json:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    asr_probe(args, processador, config)
+            else:
+                asr_probe(args, processador, config)
+            checks.append({'name': 'probe_bootloader', 'status': 'pass', 'detail': 'bootloader respondeu'})
+        except Exception as excessao:
+            checks.append({'name': 'probe_bootloader', 'status': 'fail', 'detail': str(excessao)})
+        finally:
+            asr_fechar_porta(processador)
+
+    recomendacoes = []
+    if not portas:
+        recomendacoes.append('Verifique cabo USB, driver do CP2102 e permissao de acesso a porta serial.')
+    if args.port is not None and args.port not in portas:
+        recomendacoes.append('A porta informada nao apareceu no diagnostico; confira o nome COMx.')
+    if any(item['name'] == 'probe_bootloader' and item['status'] == 'fail' for item in checks):
+        recomendacoes.append('Rode probe --sweep para encontrar delays estaveis de DTR/RTS.')
+        recomendacoes.append('Teste dtr1/dtr0/rts1/rts0 medindo primeiro no CP2102 e depois no MCU.')
+    if not recomendacoes:
+        recomendacoes.append('Ambiente basico consistente; para falhas intermitentes use --trace-json e --log-file.')
+
+    return {
+        'diagnostic': diagnostico,
+        'config': {
+            'baud': args.baud,
+            'timeout': args.timeout,
+            'auto_boot': config.auto_boot,
+            'boot_reset_delay': config.boot_reset_delay,
+            'boot_release_delay': config.boot_release_delay,
+            'ports': config.portas_disponiveis,
+        },
+        'checks': checks,
+        'recommendations': recomendacoes,
+    }
+
+
+def cli_printar_doctor(relatorio):
+    diag = relatorio['diagnostic']
+    print('%s v%s' % (diag['app'], diag['version']))
+    print('Python   : %s' % diag['python']['version'])
+    print('pyserial : %s' % diag['pyserial'])
+    print('Portas   : %s' % (', '.join(relatorio['config']['ports']) or '<nenhuma>'))
+    print('Checks:')
+    for item in relatorio['checks']:
+        print('  [%s] %s - %s' % (item['status'].upper(), item['name'], item['detail']))
+    print('Recomendacoes:')
+    for item in relatorio['recommendations']:
+        print('  - %s' % item)
 
 
 def cli_build_parser():
@@ -267,8 +372,27 @@ def cli_build_parser():
     parser_diag = subparsers.add_parser(Comandos.DIAG.value, help='mostra diagnostico do ambiente e portas seriais')
     parser_diag.add_argument('--json', dest=Argumentos.JSON.value, action='store_true',
                              help='imprime o diagnostico em JSON')
-    subparsers.add_parser(Comandos.PROBE.value,
-                          help='testa entrada no bootloader e sincronismo sem apagar ou gravar')
+    parser_doctor = subparsers.add_parser(Comandos.DOCTOR.value,
+                                          help='executa diagnostico guiado do ambiente e opcionalmente do bootloader')
+    parser_doctor.add_argument('--probe', action='store_true',
+                               help='tambem tenta sincronizar com o bootloader')
+    parser_doctor.add_argument('--json', dest=Argumentos.JSON.value, action='store_true',
+                               help='imprime o diagnostico em JSON')
+    parser_probe = subparsers.add_parser(Comandos.PROBE.value,
+                                         help='testa entrada no bootloader e sincronismo sem apagar ou gravar')
+    parser_probe.add_argument('--sweep', dest=Argumentos.SWEEP.value, action='store_true',
+                              help='testa combinacoes de baudrate e delays de auto boot')
+    parser_probe.add_argument('--sweep-bauds', dest=Argumentos.SWEEP_BAUDS.value,
+                              default=str(BAUD_DEFAULT),
+                              help='bauds separados por virgula, default: %(default)s')
+    parser_probe.add_argument('--sweep-reset-delays', dest=Argumentos.SWEEP_RESET_DELAYS.value,
+                              default='0.05,0.1,0.2',
+                              help='delays de reset separados por virgula, em segundos')
+    parser_probe.add_argument('--sweep-release-delays', dest=Argumentos.SWEEP_RELEASE_DELAYS.value,
+                              default='0.05,0.1,0.2',
+                              help='delays de release separados por virgula, em segundos')
+    parser_probe.add_argument('--json', dest=Argumentos.JSON.value, action='store_true',
+                              help='imprime resultado do sweep em JSON')
     subparsers.add_parser(Comandos.RESET.value, help='resetar o ASR')
     parser_hw_reset = subparsers.add_parser(Comandos.HW_RESET.value,
                                             help='resetar o ASR via linha RTS sem conectar no bootloader')
@@ -295,6 +419,15 @@ def cli_build_parser():
     parser_ler_mem.add_argument(Argumentos.SIZE.value, help='quantidade de bytes a serem lidos', type=arg_int)
     parser_ler_mem.add_argument(Argumentos.OUTPUT.value, nargs='?', help='arquivo opcional para salvar o dump bruto')
 
+    parser_snapshot = subparsers.add_parser(Comandos.SNAPSHOT.value,
+                                            help='le registradores definidos em um perfil de snapshot')
+    parser_snapshot.add_argument('--profile', dest=Argumentos.PROFILE.value, default='asr6601',
+                                 help='perfil builtin ou caminho para JSON de perfil')
+    parser_snapshot.add_argument('--output', dest=Argumentos.OUTPUT.value,
+                                 help='arquivo JSON opcional para salvar o snapshot')
+    parser_snapshot.add_argument('--json', dest=Argumentos.JSON.value, action='store_true',
+                                 help='imprime snapshot em JSON')
+
     parser_escrever_reg = subparsers.add_parser(Comandos.ESCREVER_REG.value, help='escrever em um registrador')
     parser_escrever_reg.add_argument(Argumentos.ADDRESS.value, help='endereco do registrador a ser escrito',
                                      type=arg_int)
@@ -316,6 +449,26 @@ def cli_build_parser():
     parser_ota_pack_inspect = subparsers.add_parser(Comandos.OTA_PACK_INSPECT.value,
                                                     help='inspeciona um pacote OTA e analisa a vector table da app')
     parser_ota_pack_inspect.add_argument(Argumentos.INPUT.value, help='arquivo OTA para inspecao')
+
+    parser_preflight = subparsers.add_parser(Comandos.PREFLIGHT.value,
+                                             help='valida plano de flash sem conectar no hardware')
+    parser_preflight.add_argument(Argumentos.ADDR_FILE.value, metavar='<address> <filename>',
+                                  help='endereco e nome do arquivo, Ex.: 0x08000000 app.bin', nargs='+')
+    parser_preflight.add_argument('--strict-app-range', dest=Argumentos.STRICT_APP_RANGE.value, action='store_true',
+                                  help='trata endereco fora da faixa da app como erro')
+    parser_preflight.add_argument('--json', dest=Argumentos.JSON.value, action='store_true',
+                                  help='imprime preflight em JSON')
+
+    parser_firmware_inspect = subparsers.add_parser(Comandos.FIRMWARE_INSPECT.value,
+                                                    help='inspeciona firmware raw ou pacote OTA simples localmente')
+    parser_firmware_inspect.add_argument(Argumentos.FIRMWARE.value, help='arquivo de firmware ou OTA simples')
+    parser_firmware_inspect.add_argument('--base-address', dest=Argumentos.BASE_ADDRESS.value, type=arg_int,
+                                         default=ASR_APP_FLASH_START,
+                                         help='endereco base esperado da aplicacao')
+    parser_firmware_inspect.add_argument('--strict', dest=Argumentos.STRICT.value, action='store_true',
+                                         help='retorna erro se a analise estrutural falhar')
+    parser_firmware_inspect.add_argument('--json', dest=Argumentos.JSON.value, action='store_true',
+                                         help='imprime inspecao em JSON')
 
     parser_ota_assinado = subparsers.add_parser(Comandos.OTA_ASSINADO.value,
                                                 help='gera pacote OTA assinado com trailer de autenticacao')
@@ -389,6 +542,12 @@ def main(argv=None):
         if args.command == Comandos.OTA_PACK_INSPECT.value:
             asr_ota_pack_inspect(args)
             return 0
+        if args.command == Comandos.PREFLIGHT.value:
+            asr_preflight_flash(args)
+            return 0
+        if args.command == Comandos.FIRMWARE_INSPECT.value:
+            relatorio = asr_firmware_inspect(args)
+            return 1 if relatorio['errors'] else 0
         if args.command == Comandos.OTA_ASSINADO.value:
             asr_ota_assinado(args)
             print('Pacote OTA assinado gerado com sucesso')
@@ -419,6 +578,7 @@ def main(argv=None):
             boot_reset_delay=args.boot_reset_delay,
             boot_release_delay=args.boot_release_delay,
             log_file=args.log_file,
+            trace_json=args.trace_json,
         )
         config.log('command=%s argv=%s baud=%d timeout=%s portas=%s' % (
             args.command,
@@ -428,7 +588,7 @@ def main(argv=None):
             ','.join(config.portas_disponiveis),
         ))
 
-        if args.port is None:
+        if args.port is None and not getattr(args, 'json', False):
             print("Encontrado %d serial ports" % len(config.portas_disponiveis))
 
         asr_mcu = ASRLoader(config)
@@ -467,9 +627,27 @@ def main(argv=None):
         elif args.command == Comandos.RESET.value:
             asr_sw_reset(args, asr_mcu, config)
             print('Reset via software')
+        elif args.command == Comandos.DOCTOR.value:
+            relatorio = cli_montar_doctor(args, config, asr_mcu)
+            if args.json:
+                print(json.dumps(relatorio, indent=2, ensure_ascii=False))
+            else:
+                cli_printar_doctor(relatorio)
+            return 1 if any(item['status'] == 'fail' for item in relatorio['checks']) else 0
         elif args.command == Comandos.PROBE.value:
-            asr_probe(args, asr_mcu, config)
-            print('Probe concluido: bootloader respondeu')
+            if args.sweep:
+                asr_probe_sweep(args, lambda: ASRLoader(config), config)
+                if not args.json:
+                    print('Probe sweep concluido')
+            else:
+                if args.json:
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        asr_probe(args, asr_mcu, config)
+                    print(json.dumps({'ok': True, 'baud': args.baud, 'ports': config.portas_disponiveis},
+                                     indent=2, ensure_ascii=False))
+                else:
+                    asr_probe(args, asr_mcu, config)
+                    print('Probe concluido: bootloader respondeu')
         elif args.command == Comandos.HW_RESET.value:
             asr_hw_reset(args, asr_mcu, config)
             print('Reset via hardware')
@@ -490,6 +668,8 @@ def main(argv=None):
             print('Valor do registrador: 0x%08X' % valor_reg[0])
         elif args.command == Comandos.LER_MEM.value:
             asr_ler_mem(args, asr_mcu, config)
+        elif args.command == Comandos.SNAPSHOT.value:
+            asr_snapshot(args, asr_mcu, config)
         elif args.command == Comandos.VERSAO_BOOTLOADER.value:
             versao = asr_versao_bootloader(args, asr_mcu, config)
             versao_raw = versao[0]
@@ -510,3 +690,4 @@ def main(argv=None):
     finally:
         if config is not None:
             config.close_log()
+            config.close_trace()

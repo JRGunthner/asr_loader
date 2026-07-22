@@ -1,20 +1,37 @@
 import binascii
+import contextlib
+import io
+import json
 import os
 import pathlib
 import struct
 import time
 from typing import TypedDict
-from .constantes import EEPROM_ENDERECO_ASR6601CB, EEPROM_ENDERECO_ASR6601SE, EEPROM_SIZE, OTA_MAGIC
+from .constantes import (
+    ASR_APP_FLASH_END,
+    ASR_APP_FLASH_START,
+    ARM_SRAM_END,
+    ARM_SRAM_START,
+    EEPROM_ENDERECO_ASR6601CB,
+    EEPROM_ENDERECO_ASR6601SE,
+    EEPROM_SIZE,
+    OTA_MAGIC,
+)
+from .diagnosticos import (
+    analisar_firmware,
+    carregar_snapshot_profile,
+    imprimir_preflight_flash,
+    imprimir_relatorio_firmware,
+    imprimir_snapshot,
+    montar_preflight_flash,
+    parse_csv_floats,
+    parse_csv_ints,
+)
 from .exceptions import CmdExcessao
 from .ota_assinado import build_ota_assinado_package, crc32_ieee, default_key_header, parse_key_from_header, \
     ota_assinado_verify_package, append_ota_tche_sufixo, split_ota_tche_sufixo
 from .ota_pacote_cripto import caminho_saida_segura_padrao, montar_pacote_seguro, verificar_pacote_seguro
 from .utils import get_crc32
-
-ASR_APP_FLASH_START = 0x08000000
-ASR_APP_FLASH_END = 0x08040000
-ARM_SRAM_START = 0x20000000
-ARM_SRAM_END = 0x40000000
 
 
 def asr_fechar_porta(processador):
@@ -54,6 +71,40 @@ def asr_conectar(processador, lista_portas, baud):
             erros.append('%s: %s' % (porta, excessao))
             asr_fechar_porta(processador)
     raise CmdExcessao('ERROR: nao foi possivel conectar (%s)' % '; '.join(erros))
+
+
+def _asr_conectar_quiet(processador, lista_portas, baud, quiet=False):
+    if quiet:
+        with contextlib.redirect_stdout(io.StringIO()):
+            return asr_conectar(processador, lista_portas, baud)
+    return asr_conectar(processador, lista_portas, baud)
+
+
+def asr_preflight_flash(param):
+    relatorio = montar_preflight_flash(
+        param.addr_file,
+        strict_app_range=getattr(param, 'strict_app_range', False),
+    )
+    if getattr(param, 'json', False):
+        print(json.dumps(relatorio, indent=2, ensure_ascii=False))
+    else:
+        imprimir_preflight_flash(relatorio)
+
+    if relatorio['errors']:
+        raise Exception('ERROR: preflight falhou: %s' % '; '.join(relatorio['errors']))
+    return relatorio
+
+
+def asr_firmware_inspect(param):
+    relatorio = analisar_firmware(param.firmware, base_address=param.base_address)
+    if getattr(param, 'json', False):
+        print(json.dumps(relatorio, indent=2, ensure_ascii=False))
+    else:
+        imprimir_relatorio_firmware(relatorio)
+
+    if getattr(param, 'strict', False) and relatorio['errors']:
+        raise Exception('ERROR: firmware_inspect falhou: %s' % '; '.join(relatorio['errors']))
+    return relatorio
 
 
 def asr_erase(param, processador, config):
@@ -97,20 +148,17 @@ def asr_clean_eeprom(param, processador, config):
 
 
 def asr_flash(param, processador, config):
-    if len(param.addr_file) % 2 != 0:
-        raise Exception('ERROR: informe pares <address> <filename>')
-
-    arquivos = []
-    for i in range(0, len(param.addr_file), 2):
-        try:
-            endereco = int(param.addr_file[i], 0)
-        except Exception:
-            raise Exception('ERROR: o endereco "%s" deve ser um numero' % param.addr_file[i])
-
-        arquivo = param.addr_file[i + 1]
-        if not os.access(arquivo, os.R_OK):
-            raise Exception('ERROR: falha na leitura do arquivo: %s' % arquivo)
-        arquivos.append((endereco, arquivo))
+    relatorio_preflight = montar_preflight_flash(param.addr_file)
+    if relatorio_preflight['errors']:
+        imprimir_preflight_flash(relatorio_preflight)
+        raise Exception('ERROR: preflight falhou: %s' % '; '.join(relatorio_preflight['errors']))
+    print('Preflight OK: %d arquivo(s), %d bytes' % (
+        len(relatorio_preflight['items']),
+        relatorio_preflight['total_size'],
+    ))
+    for aviso in relatorio_preflight['warnings']:
+        print('Aviso: %s' % aviso)
+    arquivos = [(item['address'], item['path']) for item in relatorio_preflight['items']]
 
     if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return False
@@ -262,6 +310,63 @@ def asr_probe(param, processador, config):
     return True
 
 
+def asr_probe_sweep(param, processador_factory, config):
+    reset_delays = parse_csv_floats(param.sweep_reset_delays)
+    release_delays = parse_csv_floats(param.sweep_release_delays)
+    bauds = parse_csv_ints(param.sweep_bauds)
+    resultados = []
+    reset_original = config.boot_reset_delay
+    release_original = config.boot_release_delay
+
+    try:
+        for baud in bauds:
+            for reset_delay in reset_delays:
+                for release_delay in release_delays:
+                    config.boot_reset_delay = reset_delay
+                    config.boot_release_delay = release_delay
+                    processador = processador_factory()
+                    inicio = time.perf_counter()
+                    erro = None
+                    ok = False
+                    try:
+                        _asr_conectar_quiet(processador, config.portas_disponiveis, baud, quiet=True)
+                        ok = True
+                    except Exception as excessao:
+                        erro = str(excessao)
+                    finally:
+                        asr_fechar_porta(processador)
+
+                    resultados.append({
+                        'ok': ok,
+                        'baud': baud,
+                        'boot_reset_delay': reset_delay,
+                        'boot_release_delay': release_delay,
+                        'duration_ms': round((time.perf_counter() - inicio) * 1000, 3),
+                        'error': erro,
+                    })
+    finally:
+        config.boot_reset_delay = reset_original
+        config.boot_release_delay = release_original
+
+    if getattr(param, 'json', False):
+        print(json.dumps({'results': resultados}, indent=2, ensure_ascii=False))
+    else:
+        print('Probe sweep:')
+        for item in resultados:
+            print('  %-4s baud=%d reset=%.3fs release=%.3fs dur=%.3fms %s' % (
+                'OK' if item['ok'] else 'FAIL',
+                item['baud'],
+                item['boot_reset_delay'],
+                item['boot_release_delay'],
+                item['duration_ms'],
+                item['error'] or '',
+            ))
+
+    if not any(item['ok'] for item in resultados):
+        raise CmdExcessao('ERROR: probe sweep falhou em todas as combinacoes')
+    return resultados
+
+
 def asr_verify(param, processador, config):
     if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return
@@ -388,6 +493,42 @@ def asr_ler_mem(param, processador, config):
         print('Dump salvo em: %s' % param.output)
 
     return dados
+
+
+def asr_snapshot(param, processador, config):
+    perfil = carregar_snapshot_profile(param.profile)
+    _asr_conectar_quiet(processador, config.portas_disponiveis, param.baud, quiet=getattr(param, 'json', False))
+
+    registros = []
+    for item in perfil['registers']:
+        try:
+            valor = processador.ler_reg(item['address'])[0]
+            registros.append({
+                'name': item['name'],
+                'address': item['address'],
+                'value': valor,
+                'ok': True,
+            })
+        except Exception as excessao:
+            registros.append({
+                'name': item['name'],
+                'address': item['address'],
+                'error': str(excessao),
+                'ok': False,
+            })
+
+    relatorio = {
+        'profile': perfil['name'],
+        'description': perfil['description'],
+        'registers': registros,
+    }
+    if getattr(param, 'output', None):
+        pathlib.Path(param.output).write_text(json.dumps(relatorio, indent=2, ensure_ascii=False), encoding='utf-8')
+    if getattr(param, 'json', False):
+        print(json.dumps(relatorio, indent=2, ensure_ascii=False))
+    else:
+        imprimir_snapshot(relatorio)
+    return relatorio
 
 
 def asr_escrever_reg(param, processador, config):

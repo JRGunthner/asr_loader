@@ -17,6 +17,7 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
   - [Baudrate: -b ou --baud](#baudrate--b-ou---baud)
   - [Modo log verboso: -v ou --verbose](#modo-log-verboso--v-ou---verbose)
   - [Salvar log em arquivo: --log-file](#salvar-log-em-arquivo---log-file)
+  - [Salvar trace estruturado: --trace-json](#salvar-trace-estruturado---trace-json)
   - [Timeout de conexão: -t ou --timeout](#timeout-de-conexão--t-ou---timeout)
   - [Boot automático via DTR/RTS: --no-auto-boot](#boot-automático-via-dtrrts---no-auto-boot)
   - [Tempos do boot automático: --boot-reset-delay e --boot-release-delay](#tempos-do-boot-automático---boot-reset-delay-e---boot-release-delay)
@@ -26,6 +27,8 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
   - [make](#make)
   - [erase](#erase)
   - [flash](#flash)
+  - [preflight](#preflight)
+  - [firmware_inspect](#firmware_inspect)
   - [verify](#verify)
   - [reset](#reset)
   - [hw_reset](#hw_reset)
@@ -33,6 +36,7 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
   - [clear_eeprom](#clear_eeprom)
   - [serial](#serial)
   - [diag](#diag)
+  - [doctor](#doctor)
   - [probe](#probe)
   - [ota_pack](#ota_pack)
   - [ota_pack_verify](#ota_pack_verify)
@@ -52,6 +56,7 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
   - [ler_reg](#ler_reg)
   - [escrever_reg](#escrever_reg)
   - [ler_mem](#ler_mem)
+  - [snapshot](#snapshot)
   - [help](#help)
   - [versao](#versao)
 - [Observações](#observações)
@@ -180,6 +185,24 @@ python asr_loader.py -p COM3 --log-file debug_gravacao.log probe
 ```
 
 Esse log é indicado para depurar bancada, timing de auto boot e falhas intermitentes de comunicação.
+
+---
+
+### Salvar trace estruturado: --trace-json
+Salva eventos estruturados em JSON Lines (`.jsonl`) para análise automática em scripts.
+O trace inclui eventos como `serial_tx` e `serial_result`, com comando, tamanho de pacote, status, duração e erro quando houver.
+
+**Formato:**
+```text
+--trace-json <arquivo.jsonl>
+```
+
+**Exemplo:**
+```powershell
+python asr_loader.py -p COM3 --trace-json trace_probe.jsonl probe --json
+```
+
+Use junto com `--log-file` quando precisar comparar falhas entre placas, cabos, portas COM ou ajustes de auto boot.
 
 ---
 
@@ -314,6 +337,7 @@ Apaga 4096 bytes a partir do endereço 0x08000000.
 
 ### flash
 Apaga e grava arquivos na flash.
+Antes de conectar no hardware, o comando executa um preflight local do plano de gravação para validar arquivos, tamanhos, CRC32, endereços e overlaps.
 
 **Formato:**
 ```text
@@ -325,6 +349,60 @@ flash <endereço_inicial> <arquivo.bin>
 python asr_loader.py flash 0x08000000 app.bin
 ```
 Grava o arquivo `app.bin` no endereço 0x08000000.
+
+---
+
+### preflight
+Valida localmente um plano de gravação sem abrir a porta serial.
+É útil para checar argumentos de `flash` em scripts antes de chegar na bancada.
+
+**Formato:**
+```text
+preflight <endereço_inicial> <arquivo.bin> [<endereço_inicial> <arquivo.bin> ...] [--strict-app-range] [--json]
+```
+
+**Exemplo:**
+```powershell
+python asr_loader.py preflight 0x08000000 app.bin
+python asr_loader.py preflight 0x08000000 app.bin --json
+```
+
+Valida:
+
+- arquivo existente e legível;
+- tamanho e CRC32;
+- endereço inicial/final;
+- overlap entre múltiplos arquivos;
+- aviso para endereços fora da faixa padrão da aplicação (`0x08000000` a `0x08040000`).
+
+Com `--strict-app-range`, endereço fora da faixa da aplicação vira erro.
+
+---
+
+### firmware_inspect
+Inspeciona localmente firmware raw ou pacote OTA simples.
+O comando valida a estrutura inicial da aplicação e ajuda a detectar firmware desalinhado antes da gravação.
+
+**Formato:**
+```text
+firmware_inspect <arquivo.bin> [--base-address <endereço>] [--strict] [--json]
+```
+
+**Exemplo:**
+```powershell
+python asr_loader.py firmware_inspect app.bin
+python asr_loader.py firmware_inspect app_ota.bin --json
+```
+
+Valida:
+
+- tamanho e CRC32;
+- detecção de pacote OTA simples quando o header é válido;
+- `MSP` dentro da SRAM;
+- `Reset_Handler` com bit Thumb setado;
+- `Reset_Handler` apontando para a faixa esperada da aplicação.
+
+Com `--strict`, falhas estruturais retornam código de saída `1`.
 
 ---
 
@@ -471,18 +549,49 @@ Use esse comando ao abrir um reporte de problema de gravação, porta COM ou dri
 
 ---
 
+### doctor
+Executa um diagnóstico guiado do ambiente e, opcionalmente, testa sincronismo com o bootloader.
+
+**Formato:**
+```text
+doctor [--probe] [--json]
+```
+
+**Exemplo:**
+```powershell
+python asr_loader.py -p COM3 doctor
+python asr_loader.py -p COM3 doctor --probe --json
+```
+
+O relatório inclui:
+
+- versão do ASR Loader, Python e `pyserial`;
+- portas seriais detectadas;
+- porta selecionada;
+- configuração de auto boot;
+- resultado opcional do `probe`;
+- recomendações objetivas para o próximo teste de bancada.
+
+---
+
 ### probe
 Testa entrada no bootloader e sincronismo sem apagar, gravar ou alterar memória flash.
 É o primeiro comando recomendado para validar o circuito de auto boot e a comunicação serial.
 
 **Formato:**
 ```text
-probe
+probe [--json]
+probe --sweep [--sweep-bauds <lista>] [--sweep-reset-delays <lista>] [--sweep-release-delays <lista>] [--json]
 ```
 
 **Exemplo:**
 ```powershell
 python asr_loader.py -p COM3 probe
+```
+
+**Exemplo de sweep de timings:**
+```powershell
+python asr_loader.py -p COM3 probe --sweep --sweep-bauds 115200,921600 --sweep-reset-delays 0.05,0.1,0.2 --sweep-release-delays 0.05,0.1,0.2
 ```
 
 **Exemplo com log:**
@@ -491,6 +600,7 @@ python asr_loader.py -p COM3 --log-file probe.log probe
 ```
 
 Retorna código de saída `0` se o bootloader responder e `1` se houver falha.
+Com `--sweep`, testa combinações de baudrate e delays de `DTR/RTS`, imprimindo uma tabela `OK/FAIL`.
 
 ---
 
@@ -1248,6 +1358,39 @@ O comando:
 
 ---
 
+### snapshot
+Lê registradores definidos em um perfil de snapshot, permitindo coletas repetíveis de estado do firmware.
+
+**Formato:**
+```text
+snapshot [--profile <perfil-ou-arquivo.json>] [--output <snapshot.json>] [--json]
+```
+
+**Exemplo:**
+```powershell
+python asr_loader.py -p COM3 snapshot
+python asr_loader.py -p COM3 snapshot --json --output snapshot.json
+```
+
+Perfis builtin:
+
+- `asr6601`: primeiras palavras da vector table da aplicação (`MSP`, `Reset_Handler`, `NMI`, `HardFault`);
+- `vector`: quatro primeiras palavras da vector table.
+
+Também é possível passar um arquivo JSON de perfil:
+
+```json
+{
+  "description": "registradores customizados",
+  "registers": [
+    { "name": "app_msp", "address": "0x08000000" },
+    { "name": "app_reset", "address": "0x08000004" }
+  ]
+}
+```
+
+---
+
 ### help
 Mostra a ajuda com todos os comandos e opções.
 
@@ -1283,7 +1426,7 @@ Exemplo de saída: `ASR_Loader: v1.0 (2024-06-01)`
 - Para listar as portas seriais disponíveis, basta executar sem o parâmetro `--port`.
 - Use o parâmetro `--verbose` ou `-v` para obter mais detalhes da comunicação.
 - Comandos concluídos com sucesso retornam código de saída `0`; falhas retornam código `1`.
-- Para depurar problemas de conexão, rode primeiro `diag`, depois `probe` com `--log-file`.
+- Para depurar problemas de conexão, rode primeiro `diag`, depois `doctor --probe` e `probe --sweep` com `--log-file`/`--trace-json`.
 
 ---
 

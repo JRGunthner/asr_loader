@@ -32,6 +32,28 @@ class ASRLoader(object):
     def __init__(self, config):
         self.ser = None
         self.config = config
+        self._trace_serial = None
+
+    def _trace(self, event, **campos):
+        if hasattr(self.config, 'trace'):
+            self.config.trace(event, **campos)
+
+    def _trace_serial_result(self, status=None, rx_len=0, rx_hex=None, error=None):
+        contexto = self._trace_serial or {}
+        inicio = contexto.get('start')
+        campos = {
+            'cmd': contexto.get('cmd'),
+            'tx_len': contexto.get('tx_len'),
+            'rx_status': status,
+            'rx_len': rx_len,
+        }
+        if isinstance(inicio, (int, float)):
+            campos['duration_ms'] = round((time.perf_counter() - inicio) * 1000, 3)
+        if rx_hex is not None:
+            campos['rx_hex'] = rx_hex
+        if error is not None:
+            campos['error'] = error
+        self._trace('serial_result', **campos)
 
     def sync(self):
         self.enviar_cmd(CMD_SYNC)
@@ -224,10 +246,17 @@ class ASRLoader(object):
         pkt = struct.pack(b'<BBH', 0xFE, cmd, len(buf)) + buf
         checksum = zlib.crc32(pkt) & 0xFFFFFFFF
         pkt += struct.pack(b'<IB', checksum, 0xEF)
+        tx_hex = binascii.hexlify(pkt).decode('ascii')
+        self._trace_serial = {
+            'cmd': cmd,
+            'tx_len': len(pkt),
+            'start': time.perf_counter(),
+        }
 
         if self.config.verbose:
             print('Tx[%d]:' % len(pkt), binascii.hexlify(pkt))
-        self.config.log('Tx[%d]: %s' % (len(pkt), binascii.hexlify(pkt).decode('ascii')))
+        self.config.log('Tx[%d]: %s' % (len(pkt), tx_hex))
+        self._trace('serial_tx', cmd=cmd, tx_len=len(pkt), tx_hex=tx_hex)
 
         self.ser.flush_input()
         self.ser.write(pkt)
@@ -236,31 +265,42 @@ class ASRLoader(object):
         header = self.ser.read(4)
         if header == b'':
             self.config.log('Rx timeout header')
+            self._trace_serial_result(error='timeout_header')
             raise CmdExcessao("ERROR: timeout leitura do header response")
         start, status, rsp_data_len = struct.unpack('<BBH', header)
         if start != 0xFE:
+            self._trace_serial_result(status=status, rx_len=len(header), rx_hex=binascii.hexlify(header).decode('ascii'),
+                                      error='bad_start_marker')
             raise CmdExcessao("ERROR: pacote de resposta errado")
         if rsp_data_len > 512:
+            self._trace_serial_result(status=status, rx_len=len(header), rx_hex=binascii.hexlify(header).decode('ascii'),
+                                      error='oversized_payload')
             raise CmdExcessao("ERROR: tamanho do pacote de resposta errado")
 
         remain_data = self.ser.read(rsp_data_len + 5)
         if remain_data == b'':
             self.config.log('Rx timeout dados')
+            self._trace_serial_result(status=status, rx_len=len(header), rx_hex=binascii.hexlify(header).decode('ascii'),
+                                      error='timeout_data')
             raise CmdExcessao("ERROR: timeout leitura de dados")
 
         pkt = header + remain_data
+        rx_hex = binascii.hexlify(pkt).decode('ascii')
 
         if self.config.verbose:
             print('Rx[%d]:' % len(pkt), binascii.hexlify(pkt))
-        self.config.log('Rx[%d]: %s' % (len(pkt), binascii.hexlify(pkt).decode('ascii')))
+        self.config.log('Rx[%d]: %s' % (len(pkt), rx_hex))
 
         crc, end = struct.unpack('<IB', pkt[4 + rsp_data_len:])
 
         if end != 0xEF:
+            self._trace_serial_result(status=status, rx_len=len(pkt), rx_hex=rx_hex, error='bad_end_marker')
             raise CmdExcessao("ERROR: pacote de resposta errado")
 
         checksum = zlib.crc32(pkt[:4 + rsp_data_len]) & 0xFFFFFFFF
         if crc != checksum:
+            self._trace_serial_result(status=status, rx_len=len(pkt), rx_hex=rx_hex, error='bad_crc')
             raise CmdExcessao("ERROR: CRC errado")
 
+        self._trace_serial_result(status=status, rx_len=len(pkt), rx_hex=rx_hex)
         return status, pkt[4:4 + rsp_data_len]

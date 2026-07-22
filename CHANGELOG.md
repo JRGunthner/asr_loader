@@ -30,6 +30,13 @@
 - Adição do comando `probe` para testar auto boot e sincronismo sem apagar ou gravar a flash.
 - Adição de testes automatizados sem hardware para parser da CLI e geração/verificação de pacotes OTA.
 - Adição de testes para o protocolo serial, runtime/log, utilitários, comandos puros, helpers de build e geração/verificação de pacotes OTA.
+- Adição da opção global `--trace-json` para registrar eventos estruturados em JSON Lines, incluindo `TX/RX`, status e duração dos comandos.
+- Adição de `probe --sweep` para testar combinações de baudrate e delays de auto boot (`DTR/RTS`) em bancada.
+- Adição do comando `doctor` para diagnóstico guiado do ambiente, portas seriais e sincronismo opcional com o bootloader.
+- Adição do comando `preflight` e validação prévia automática no `flash` para detectar arquivos ausentes, CRC, tamanho, faixa de endereço e overlaps antes de conectar no hardware.
+- Adição do comando `firmware_inspect` para validar localmente firmware raw ou OTA simples, incluindo vector table, MSP, Reset Handler e CRC32.
+- Adição do comando `snapshot` para ler registradores definidos por perfil builtin ou JSON, facilitando coletas repetíveis de estado do firmware.
+- Adição de simulador de bootloader nos testes para validar fluxos reais da CLI sem hardware.
 
 ## v1.2 - 2025-10-07
 - Estruturação modular da aplicação em `src/`, separando CLI, comandos, protocolo, constantes, utilitários e runtime.
