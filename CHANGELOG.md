@@ -29,6 +29,7 @@
 - Adição da opção global `--log-file` para registrar porta usada, sequência `DTR/RTS`, pacotes `TX/RX` e erros.
 - Adição do comando `probe` para testar auto boot e sincronismo sem apagar ou gravar a flash.
 - Adição de testes automatizados sem hardware para parser da CLI e geração/verificação de pacotes OTA.
+- Adição de testes para o protocolo serial, runtime/log, utilitários, comandos puros, helpers de build e geração/verificação de pacotes OTA.
 
 ## v1.2 - 2025-10-07
 - Estruturação modular da aplicação em `src/`, separando CLI, comandos, protocolo, constantes, utilitários e runtime.
