@@ -27,7 +27,7 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
   - [make](#make)
   - [erase](#erase)
   - [flash](#flash)
-  - [preflight](#preflight)
+  - [prevalidar](#prevalidar)
   - [firmware_inspect](#firmware_inspect)
   - [verify](#verify)
   - [reset](#reset)
@@ -35,9 +35,9 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
   - [dtr1 / dtr0 / rts1 / rts0](#dtr1--dtr0--rts1--rts0)
   - [clear_eeprom](#clear_eeprom)
   - [serial](#serial)
-  - [diag](#diag)
+  - [comdiag](#comdiag)
   - [doctor](#doctor)
-  - [probe](#probe)
+  - [testeboot](#testeboot)
   - [ota_pack](#ota_pack)
   - [ota_pack_verify](#ota_pack_verify)
   - [ota_pack_inspect](#ota_pack_inspect)
@@ -181,7 +181,7 @@ Salva em arquivo os principais eventos da execução, incluindo porta usada, par
 
 **Exemplo:**
 ```powershell
-python asr_loader.py -p COM3 --log-file debug_gravacao.log probe
+python asr_loader.py -p COM3 --log-file debug_gravacao.log testeboot
 ```
 
 Esse log é indicado para depurar bancada, timing de auto boot e falhas intermitentes de comunicação.
@@ -199,7 +199,7 @@ O trace inclui eventos como `serial_tx` e `serial_result`, com comando, tamanho 
 
 **Exemplo:**
 ```powershell
-python asr_loader.py -p COM3 --trace-json trace_probe.jsonl probe --json
+python asr_loader.py -p COM3 --trace-json trace_testeboot.jsonl testeboot --json
 ```
 
 Use junto com `--log-file` quando precisar comparar falhas entre placas, cabos, portas COM ou ajustes de auto boot.
@@ -337,7 +337,7 @@ Apaga 4096 bytes a partir do endereço 0x08000000.
 
 ### flash
 Apaga e grava arquivos na flash.
-Antes de conectar no hardware, o comando executa um preflight local do plano de gravação para validar arquivos, tamanhos, CRC32, endereços e overlaps.
+Antes de conectar no hardware, o comando executa uma pré-validação local do plano de gravação para validar arquivos, tamanhos, CRC32, endereços e overlaps.
 
 **Formato:**
 ```text
@@ -352,19 +352,19 @@ Grava o arquivo `app.bin` no endereço 0x08000000.
 
 ---
 
-### preflight
+### prevalidar
 Valida localmente um plano de gravação sem abrir a porta serial.
 É útil para checar argumentos de `flash` em scripts antes de chegar na bancada.
 
 **Formato:**
 ```text
-preflight <endereço_inicial> <arquivo.bin> [<endereço_inicial> <arquivo.bin> ...] [--strict-app-range] [--json]
+prevalidar <endereço_inicial> <arquivo.bin> [<endereço_inicial> <arquivo.bin> ...] [--strict-app-range] [--json]
 ```
 
 **Exemplo:**
 ```powershell
-python asr_loader.py preflight 0x08000000 app.bin
-python asr_loader.py preflight 0x08000000 app.bin --json
+python asr_loader.py prevalidar 0x08000000 app.bin
+python asr_loader.py prevalidar 0x08000000 app.bin --json
 ```
 
 Valida:
@@ -526,23 +526,23 @@ Exemplo de saída: `0123456789abcdef`
 
 ---
 
-### diag
+### comdiag
 Mostra informações úteis para desenvolvimento e depuração sem conectar no bootloader.
 Inclui versão do ASR Loader, data/fonte do build, Python em uso, versão do `pyserial` e detalhes das portas seriais detectadas.
 
 **Formato:**
 ```text
-diag [--json]
+comdiag [--json]
 ```
 
 **Exemplo:**
 ```powershell
-python asr_loader.py diag
+python asr_loader.py comdiag
 ```
 
 **Exemplo em JSON:**
 ```powershell
-python asr_loader.py diag --json
+python asr_loader.py comdiag --json
 ```
 
 Use esse comando ao abrir um reporte de problema de gravação, porta COM ou driver USB-serial.
@@ -554,13 +554,13 @@ Executa um diagnóstico guiado do ambiente e, opcionalmente, testa sincronismo c
 
 **Formato:**
 ```text
-doctor [--probe] [--json]
+doctor [--testeboot] [--json]
 ```
 
 **Exemplo:**
 ```powershell
 python asr_loader.py -p COM3 doctor
-python asr_loader.py -p COM3 doctor --probe --json
+python asr_loader.py -p COM3 doctor --testeboot --json
 ```
 
 O relatório inclui:
@@ -569,34 +569,34 @@ O relatório inclui:
 - portas seriais detectadas;
 - porta selecionada;
 - configuração de auto boot;
-- resultado opcional do `probe`;
+- resultado opcional do `testeboot`;
 - recomendações objetivas para o próximo teste de bancada.
 
 ---
 
-### probe
+### testeboot
 Testa entrada no bootloader e sincronismo sem apagar, gravar ou alterar memória flash.
 É o primeiro comando recomendado para validar o circuito de auto boot e a comunicação serial.
 
 **Formato:**
 ```text
-probe [--json]
-probe --sweep [--sweep-bauds <lista>] [--sweep-reset-delays <lista>] [--sweep-release-delays <lista>] [--json]
+testeboot [--json]
+testeboot --sweep [--sweep-bauds <lista>] [--sweep-reset-delays <lista>] [--sweep-release-delays <lista>] [--json]
 ```
 
 **Exemplo:**
 ```powershell
-python asr_loader.py -p COM3 probe
+python asr_loader.py -p COM3 testeboot
 ```
 
 **Exemplo de sweep de timings:**
 ```powershell
-python asr_loader.py -p COM3 probe --sweep --sweep-bauds 115200,921600 --sweep-reset-delays 0.05,0.1,0.2 --sweep-release-delays 0.05,0.1,0.2
+python asr_loader.py -p COM3 testeboot --sweep --sweep-bauds 115200,921600 --sweep-reset-delays 0.05,0.1,0.2 --sweep-release-delays 0.05,0.1,0.2
 ```
 
 **Exemplo com log:**
 ```powershell
-python asr_loader.py -p COM3 --log-file probe.log probe
+python asr_loader.py -p COM3 --log-file testeboot.log testeboot
 ```
 
 Retorna código de saída `0` se o bootloader responder e `1` se houver falha.
@@ -1426,7 +1426,7 @@ Exemplo de saída: `ASR_Loader: v1.0 (2024-06-01)`
 - Para listar as portas seriais disponíveis, basta executar sem o parâmetro `--port`.
 - Use o parâmetro `--verbose` ou `-v` para obter mais detalhes da comunicação.
 - Comandos concluídos com sucesso retornam código de saída `0`; falhas retornam código `1`.
-- Para depurar problemas de conexão, rode primeiro `diag`, depois `doctor --probe` e `probe --sweep` com `--log-file`/`--trace-json`.
+- Para depurar problemas de conexão, rode primeiro `comdiag`, depois `doctor --testeboot` e `testeboot --sweep` com `--log-file`/`--trace-json`.
 
 ---
 

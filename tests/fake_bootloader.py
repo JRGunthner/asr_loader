@@ -17,56 +17,56 @@ from src.constantes import (
 
 
 class FakeBootloaderSerial:
-    def __init__(self, registers=None, fail_commands=None):
+    def __init__(self, registradores=None, comandos_com_falha=None):
         self.port = 'COM_FAKE'
         self.baudrate = 9600
-        self.registers = dict(registers or {})
-        self.fail_commands = set(fail_commands or [])
-        self.response = b''
-        self.closed = False
-        self.writes = []
-        self.dtr_states = []
-        self.rts_states = []
+        self.registradores = dict(registradores or {})
+        self.comandos_com_falha = set(comandos_com_falha or [])
+        self.resposta = b''
+        self.fechada = False
+        self.escritas = []
+        self.estados_dtr = []
+        self.estados_rts = []
 
-    def read(self, size):
-        if not self.response:
+    def read(self, tamanho):
+        if not self.resposta:
             return b''
-        chunk = self.response[:size]
-        self.response = self.response[size:]
-        return chunk
+        trecho = self.resposta[:tamanho]
+        self.resposta = self.resposta[tamanho:]
+        return trecho
 
-    def write(self, data):
-        self.writes.append(data)
-        _start, command, payload_len = struct.unpack('<BBH', data[:4])
-        payload = data[4:4 + payload_len]
-        status = 1 if command in self.fail_commands else 0
-        response_payload = b''
+    def write(self, dados):
+        self.escritas.append(dados)
+        _inicio, comando, tamanho_carga = struct.unpack('<BBH', dados[:4])
+        carga = dados[4:4 + tamanho_carga]
+        estado = 1 if comando in self.comandos_com_falha else 0
+        carga_resposta = b''
 
-        if status == 0:
-            if command == CMD_SN:
-                response_payload = b'1234567890abcdef'
-            elif command == CMD_VERSION:
-                response_payload = struct.pack('<I', 0x01020304)
-            elif command == CMD_RDREG:
-                address = struct.unpack('<I', payload)[0]
-                response_payload = struct.pack('<I', self.registers.get(address, 0))
-            elif command == CMD_WRREG:
-                address, value = struct.unpack('<II', payload)
-                self.registers[address] = value
-            elif command in (CMD_SYNC, CMD_BAUDRATE, CMD_ERASE, CMD_FLASH, CMD_VERIFY, CMD_JUMP, CMD_REBOOT):
-                response_payload = b''
+        if estado == 0:
+            if comando == CMD_SN:
+                carga_resposta = b'1234567890abcdef'
+            elif comando == CMD_VERSION:
+                carga_resposta = struct.pack('<I', 0x01020304)
+            elif comando == CMD_RDREG:
+                endereco = struct.unpack('<I', carga)[0]
+                carga_resposta = struct.pack('<I', self.registradores.get(endereco, 0))
+            elif comando == CMD_WRREG:
+                endereco, valor = struct.unpack('<II', carga)
+                self.registradores[endereco] = valor
+            elif comando in (CMD_SYNC, CMD_BAUDRATE, CMD_ERASE, CMD_FLASH, CMD_VERIFY, CMD_JUMP, CMD_REBOOT):
+                carga_resposta = b''
 
-        self.response = response_packet(status=status, data=response_payload)
-        return len(data)
+        self.resposta = montar_pacote_resposta(estado=estado, dados=carga_resposta)
+        return len(dados)
 
     def close(self):
-        self.closed = True
+        self.fechada = True
 
-    def set_dtr(self, state):
-        self.dtr_states.append(state)
+    def set_dtr(self, estado):
+        self.estados_dtr.append(estado)
 
-    def set_rts(self, state):
-        self.rts_states.append(state)
+    def set_rts(self, estado):
+        self.estados_rts.append(estado)
 
     def flush_input(self):
         pass
@@ -75,7 +75,7 @@ class FakeBootloaderSerial:
         pass
 
 
-def response_packet(status=0, data=b''):
-    header = struct.pack('<BBH', 0xFE, status, len(data))
-    crc = zlib.crc32(header + data) & 0xFFFFFFFF
-    return header + data + struct.pack('<IB', crc, 0xEF)
+def montar_pacote_resposta(estado=0, dados=b''):
+    cabecalho = struct.pack('<BBH', 0xFE, estado, len(dados))
+    crc = zlib.crc32(cabecalho + dados) & 0xFFFFFFFF
+    return cabecalho + dados + struct.pack('<IB', crc, 0xEF)

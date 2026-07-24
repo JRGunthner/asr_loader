@@ -1,9 +1,13 @@
 import contextlib
 import io
+from pathlib import Path
 import struct
+import sys
 import unittest
 from unittest import mock
 import zlib
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.ASRLoader import ASRLoader
 from src.constantes import (
@@ -28,7 +32,7 @@ from src.constantes import (
 from src.exceptions import CmdExcessao
 
 
-class DummyConfig:
+class ConfiguracaoSimulada:
     def __init__(self):
         self.verbose = False
         self.com_timeout = 2
@@ -41,11 +45,11 @@ class DummyConfig:
         self.logs.append(mensagem)
 
 
-class FakeSerial:
-    def __init__(self, read_chunks=None):
+class SerialSimulada:
+    def __init__(self, blocos_de_leitura=None):
         self.port = 'COM_TEST'
         self.baudrate = 9600
-        self.read_chunks = list(read_chunks or [])
+        self.read_chunks = list(blocos_de_leitura or [])
         self.writes = []
         self.dtr_states = []
         self.rts_states = []
@@ -53,7 +57,7 @@ class FakeSerial:
         self.flush_output_count = 0
         self.closed = False
 
-    def read(self, size):
+    def read(self, _tamanho):
         if not self.read_chunks:
             return b''
         return self.read_chunks.pop(0)
@@ -78,155 +82,156 @@ class FakeSerial:
         self.flush_output_count += 1
 
 
-def response_packet(status=0, data=b''):
-    header = struct.pack('<BBH', 0xFE, status, len(data))
-    crc = zlib.crc32(header + data) & 0xFFFFFFFF
-    return header + data + struct.pack('<IB', crc, 0xEF)
+def montar_pacote_de_resposta(status=0, dados=b''):
+    cabecalho = struct.pack('<BBH', 0xFE, status, len(dados))
+    crc = zlib.crc32(cabecalho + dados) & 0xFFFFFFFF
+    return cabecalho + dados + struct.pack('<IB', crc, 0xEF)
 
 
-class ASRLoaderProtocolTests(unittest.TestCase):
-    def make_loader(self, fake_serial=None):
-        config = DummyConfig()
-        loader = ASRLoader(config)
-        loader.ser = fake_serial or FakeSerial()
-        return loader, config
+def criar_carregador(serial_simulada=None):
+    configuracao = ConfiguracaoSimulada()
+    carregador = ASRLoader(configuracao)
+    carregador.ser = serial_simulada or SerialSimulada()
+    return carregador, configuracao
 
-    def written_command(self, fake_serial, index=0):
-        packet = fake_serial.writes[index]
-        start, command, payload_len = struct.unpack('<BBH', packet[:4])
-        self.assertEqual(start, 0xFE)
-        return command, packet[4:4 + payload_len]
 
-    def test_enviar_cmd_builds_packet_with_crc_and_end_marker(self):
-        fake = FakeSerial()
-        loader, config = self.make_loader(fake)
+class TestesDoProtocoloASRLoader(unittest.TestCase):
+    def obter_comando_escrito(self, serial_simulada, indice=0):
+        pacote = serial_simulada.writes[indice]
+        inicio, comando, tamanho_dados = struct.unpack('<BBH', pacote[:4])
+        self.assertEqual(inicio, 0xFE)
+        return comando, pacote[4:4 + tamanho_dados]
 
-        loader.enviar_cmd(CMD_SYNC, b'ab')
+    def test_enviar_cmd_monta_pacote_com_crc_e_marcador_final(self):
+        serial_simulada = SerialSimulada()
+        carregador, configuracao = criar_carregador(serial_simulada)
 
-        self.assertEqual(fake.flush_input_count, 1)
-        self.assertEqual(len(fake.writes), 1)
-        packet = fake.writes[0]
-        self.assertEqual(packet[:4], struct.pack('<BBH', 0xFE, CMD_SYNC, 2))
-        self.assertEqual(packet[4:6], b'ab')
-        self.assertEqual(packet[-1], 0xEF)
-        expected_crc = zlib.crc32(packet[:-5]) & 0xFFFFFFFF
-        actual_crc = struct.unpack('<I', packet[-5:-1])[0]
-        self.assertEqual(actual_crc, expected_crc)
-        self.assertTrue(any('Tx' in item for item in config.logs))
+        carregador.enviar_cmd(CMD_SYNC, b'ab')
 
-    def test_aguardar_resposta_returns_status_and_payload(self):
-        packet = response_packet(status=0, data=b'\x01\x02\x03')
-        fake = FakeSerial([packet[:4], packet[4:]])
-        loader, config = self.make_loader(fake)
+        self.assertEqual(serial_simulada.flush_input_count, 1)
+        self.assertEqual(len(serial_simulada.writes), 1)
+        pacote = serial_simulada.writes[0]
+        self.assertEqual(pacote[:4], struct.pack('<BBH', 0xFE, CMD_SYNC, 2))
+        self.assertEqual(pacote[4:6], b'ab')
+        self.assertEqual(pacote[-1], 0xEF)
+        crc_esperado = zlib.crc32(pacote[:-5]) & 0xFFFFFFFF
+        crc_atual = struct.unpack('<I', pacote[-5:-1])[0]
+        self.assertEqual(crc_atual, crc_esperado)
+        self.assertTrue(any('Tx' in item for item in configuracao.logs))
 
-        status, payload = loader.aguardar_resposta()
+    def test_aguardar_resposta_retorna_status_e_dados(self):
+        pacote = montar_pacote_de_resposta(status=0, dados=b'\x01\x02\x03')
+        serial_simulada = SerialSimulada([pacote[:4], pacote[4:]])
+        carregador, configuracao = criar_carregador(serial_simulada)
+
+        status, dados = carregador.aguardar_resposta()
 
         self.assertEqual(status, 0)
-        self.assertEqual(payload, b'\x01\x02\x03')
-        self.assertTrue(any('Rx' in item for item in config.logs))
+        self.assertEqual(dados, b'\x01\x02\x03')
+        self.assertTrue(any('Rx' in item for item in configuracao.logs))
 
-    def test_aguardar_resposta_rejects_bad_start_marker(self):
+    def test_aguardar_resposta_rejeita_marcador_inicial_invalido(self):
         header = struct.pack('<BBH', 0x00, 0, 0)
-        fake = FakeSerial([header])
-        loader, _config = self.make_loader(fake)
+        serial_simulada = SerialSimulada([header])
+        carregador, _configuracao = criar_carregador(serial_simulada)
 
         with self.assertRaisesRegex(CmdExcessao, 'pacote de resposta errado'):
-            loader.aguardar_resposta()
+            carregador.aguardar_resposta()
 
-    def test_aguardar_resposta_rejects_bad_crc(self):
-        packet = bytearray(response_packet(status=0, data=b'x'))
+    def test_aguardar_resposta_rejeita_crc_invalido(self):
+        packet = bytearray(montar_pacote_de_resposta(status=0, dados=b'x'))
         packet[-5] ^= 0xFF
-        fake = FakeSerial([bytes(packet[:4]), bytes(packet[4:])])
-        loader, _config = self.make_loader(fake)
+        fake = SerialSimulada([bytes(packet[:4]), bytes(packet[4:])])
+        loader, _config = criar_carregador(fake)
 
         with self.assertRaisesRegex(CmdExcessao, 'CRC errado'):
             loader.aguardar_resposta()
 
-    def test_aguardar_resposta_rejects_bad_end_marker(self):
-        packet = bytearray(response_packet(status=0, data=b'x'))
+    def test_aguardar_resposta_rejeita_marcador_final_invalido(self):
+        packet = bytearray(montar_pacote_de_resposta(status=0, dados=b'x'))
         packet[-1] = 0
-        fake = FakeSerial([bytes(packet[:4]), bytes(packet[4:])])
-        loader, _config = self.make_loader(fake)
+        fake = SerialSimulada([bytes(packet[:4]), bytes(packet[4:])])
+        loader, _config = criar_carregador(fake)
 
         with self.assertRaisesRegex(CmdExcessao, 'pacote de resposta errado'):
             loader.aguardar_resposta()
 
-    def test_aguardar_resposta_rejects_oversized_payload(self):
-        fake = FakeSerial([struct.pack('<BBH', 0xFE, 0, 513)])
-        loader, _config = self.make_loader(fake)
+    def test_aguardar_resposta_rejeita_dados_acima_do_limite(self):
+        fake = SerialSimulada([struct.pack('<BBH', 0xFE, 0, 513)])
+        loader, _config = criar_carregador(fake)
 
         with self.assertRaisesRegex(CmdExcessao, 'tamanho do pacote'):
             loader.aguardar_resposta()
 
-    def test_aguardar_resposta_times_out_on_empty_header(self):
-        fake = FakeSerial([b''])
-        loader, config = self.make_loader(fake)
+    def test_aguardar_resposta_expira_com_cabecalho_vazio(self):
+        fake = SerialSimulada([b''])
+        loader, config = criar_carregador(fake)
 
         with self.assertRaisesRegex(CmdExcessao, 'timeout leitura do header'):
             loader.aguardar_resposta()
         self.assertIn('Rx timeout header', config.logs)
 
-    def test_aguardar_resposta_times_out_on_empty_payload(self):
-        fake = FakeSerial([struct.pack('<BBH', 0xFE, 0, 1), b''])
-        loader, config = self.make_loader(fake)
+    def test_aguardar_resposta_expira_com_dados_vazios(self):
+        fake = SerialSimulada([struct.pack('<BBH', 0xFE, 0, 1), b''])
+        loader, config = criar_carregador(fake)
 
         with self.assertRaisesRegex(CmdExcessao, 'timeout leitura de dados'):
             loader.aguardar_resposta()
         self.assertIn('Rx timeout dados', config.logs)
 
-    def test_write_commands_send_expected_payloads(self):
+    def test_comandos_de_escrita_enviam_dados_esperados(self):
         cases = [
             (
                 'jump',
-                lambda loader: loader.jump(0x08000123),
+                lambda ldr: ldr.jump(0x08000123),
                 CMD_JUMP,
                 struct.pack('<I', 0x08000123),
             ),
             (
                 'flash',
-                lambda loader: loader.flash(0x08000000, b'abcd'),
+                lambda ldr: ldr.flash(0x08000000, b'abcd'),
                 CMD_FLASH,
                 struct.pack('<II', 0x08000000, 4) + b'abcd',
             ),
             (
                 'erase',
-                lambda loader: loader.erase(0x08000000, 4096),
+                lambda ldr: ldr.erase(0x08000000, 4096),
                 CMD_ERASE,
                 struct.pack('<II', 0x08000000, 4096),
             ),
             (
                 'verify',
-                lambda loader: loader.verify(0x08000000, 128, 0x12345678),
+                lambda ldr: ldr.verify(0x08000000, 128, 0x12345678),
                 CMD_VERIFY,
                 struct.pack('<III', 0x08000000, 128, 0x12345678),
             ),
             (
                 'escrever_otp',
-                lambda loader: loader.escrever_otp(0x1FFF7000, b'\xAA\x55'),
+                lambda ldr: ldr.escrever_otp(0x1FFF7000, b'\xAA\x55'),
                 CMD_WROTP,
                 struct.pack('<II', 0x1FFF7000, 2) + b'\xAA\x55',
             ),
             (
                 'escrever_opt0',
-                lambda loader: loader.escrever_opt0(0x11223344, 0x55667788),
+                lambda ldr: ldr.escrever_opt0(0x11223344, 0x55667788),
                 CMD_WROPT0,
                 struct.pack('<II', 0x11223344, 0x55667788),
             ),
             (
                 'escrever_opt1',
-                lambda loader: loader.escrever_opt1(0x99AABBCC, 0xDDEEFF00),
+                lambda ldr: ldr.escrever_opt1(0x99AABBCC, 0xDDEEFF00),
                 CMD_WROPT1,
                 struct.pack('<II', 0x99AABBCC, 0xDDEEFF00),
             ),
             (
                 'sw_reset',
-                lambda loader: loader.sw_reset(1),
+                lambda ldr: ldr.sw_reset(1),
                 CMD_REBOOT,
                 struct.pack('B', 1),
             ),
             (
                 'escrever_reg',
-                lambda loader: loader.escrever_reg(0x40021000, 0x1234),
+                lambda ldr: ldr.escrever_reg(0x40021000, 0x1234),
                 CMD_WRREG,
                 struct.pack('<II', 0x40021000, 0x1234),
             ),
@@ -234,21 +239,21 @@ class ASRLoaderProtocolTests(unittest.TestCase):
 
         for name, action, expected_command, expected_payload in cases:
             with self.subTest(name=name):
-                packet = response_packet(status=0)
-                fake = FakeSerial([packet[:4], packet[4:]])
-                loader, _config = self.make_loader(fake)
+                packet = montar_pacote_de_resposta(status=0)
+                fake = SerialSimulada([packet[:4], packet[4:]])
+                loader, _config = criar_carregador(fake)
 
                 action(loader)
 
-                command, payload = self.written_command(fake)
+                command, payload = self.obter_comando_escrito(fake)
                 self.assertEqual(command, expected_command)
                 self.assertEqual(payload, expected_payload)
 
-    def test_read_commands_return_decoded_payloads(self):
+    def test_comandos_de_leitura_retornam_dados_decodificados(self):
         cases = [
             (
                 'ler_otp',
-                lambda loader: loader.ler_otp(0x1FFF7000, 4),
+                lambda ldr: ldr.ler_otp(0x1FFF7000, 4),
                 CMD_RDOTP,
                 struct.pack('<II', 0x1FFF7000, 4),
                 b'abcd',
@@ -256,7 +261,7 @@ class ASRLoaderProtocolTests(unittest.TestCase):
             ),
             (
                 'ler_opt0',
-                lambda loader: loader.ler_opt0(),
+                lambda ldr: ldr.ler_opt0(),
                 CMD_RDOPT0,
                 b'',
                 struct.pack('<II', 0x11223344, 0x55667788),
@@ -264,7 +269,7 @@ class ASRLoaderProtocolTests(unittest.TestCase):
             ),
             (
                 'ler_opt1',
-                lambda loader: loader.ler_opt1(),
+                lambda ldr: ldr.ler_opt1(),
                 CMD_RDOPT1,
                 b'',
                 struct.pack('<II', 0x99AABBCC, 0xDDEEFF00),
@@ -272,7 +277,7 @@ class ASRLoaderProtocolTests(unittest.TestCase):
             ),
             (
                 'ler_reg',
-                lambda loader: loader.ler_reg(0x40021000),
+                lambda ldr: ldr.ler_reg(0x40021000),
                 CMD_RDREG,
                 struct.pack('<I', 0x40021000),
                 struct.pack('<I', 0x12345678),
@@ -280,7 +285,7 @@ class ASRLoaderProtocolTests(unittest.TestCase):
             ),
             (
                 'versao_bootloader',
-                lambda loader: loader.versao_bootloader(),
+                lambda ldr: ldr.versao_bootloader(),
                 CMD_VERSION,
                 b'',
                 struct.pack('<I', 0x01020304),
@@ -290,74 +295,74 @@ class ASRLoaderProtocolTests(unittest.TestCase):
 
         for name, action, expected_command, expected_payload, response_payload, expected_result in cases:
             with self.subTest(name=name):
-                packet = response_packet(status=0, data=response_payload)
-                fake = FakeSerial([packet[:4], packet[4:]])
-                loader, _config = self.make_loader(fake)
+                packet = montar_pacote_de_resposta(status=0, dados=response_payload)
+                fake = SerialSimulada([packet[:4], packet[4:]])
+                loader, _config = criar_carregador(fake)
 
                 result = action(loader)
 
-                command, payload = self.written_command(fake)
+                command, payload = self.obter_comando_escrito(fake)
                 self.assertEqual(command, expected_command)
                 self.assertEqual(payload, expected_payload)
                 self.assertEqual(result, expected_result)
 
-    def test_command_methods_raise_on_nonzero_status(self):
+    def test_metodos_de_comando_lancam_excecao_com_status_diferente_de_zero(self):
         cases = [
-            ('jump', lambda loader: loader.jump(0x08000123)),
-            ('flash', lambda loader: loader.flash(0x08000000, b'abcd')),
-            ('erase', lambda loader: loader.erase(0x08000000, 4096)),
-            ('verify', lambda loader: loader.verify(0x08000000, 128, 0x12345678)),
-            ('escrever_otp', lambda loader: loader.escrever_otp(0x1FFF7000, b'\xAA')),
-            ('ler_otp', lambda loader: loader.ler_otp(0x1FFF7000, 4)),
-            ('escrever_opt0', lambda loader: loader.escrever_opt0(1, 2)),
-            ('ler_opt0', lambda loader: loader.ler_opt0()),
-            ('escrever_opt1', lambda loader: loader.escrever_opt1(1, 2)),
-            ('ler_opt1', lambda loader: loader.ler_opt1()),
-            ('sw_reset', lambda loader: loader.sw_reset()),
-            ('serial_asr', lambda loader: loader.serial_asr()),
-            ('escrever_reg', lambda loader: loader.escrever_reg(0x40021000, 1)),
-            ('ler_reg', lambda loader: loader.ler_reg(0x40021000)),
-            ('versao_bootloader', lambda loader: loader.versao_bootloader()),
+            ('jump', lambda ldr: ldr.jump(0x08000123)),
+            ('flash', lambda ldr: ldr.flash(0x08000000, b'abcd')),
+            ('erase', lambda ldr: ldr.erase(0x08000000, 4096)),
+            ('verify', lambda ldr: ldr.verify(0x08000000, 128, 0x12345678)),
+            ('escrever_otp', lambda ldr: ldr.escrever_otp(0x1FFF7000, b'\xAA')),
+            ('ler_otp', lambda ldr: ldr.ler_otp(0x1FFF7000, 4)),
+            ('escrever_opt0', lambda ldr: ldr.escrever_opt0(1, 2)),
+            ('ler_opt0', lambda ldr: ldr.ler_opt0()),
+            ('escrever_opt1', lambda ldr: ldr.escrever_opt1(1, 2)),
+            ('ler_opt1', lambda ldr: ldr.ler_opt1()),
+            ('sw_reset', lambda ldr: ldr.sw_reset()),
+            ('serial_asr', lambda ldr: ldr.serial_asr()),
+            ('escrever_reg', lambda ldr: ldr.escrever_reg(0x40021000, 1)),
+            ('ler_reg', lambda ldr: ldr.ler_reg(0x40021000)),
+            ('versao_bootloader', lambda ldr: ldr.versao_bootloader()),
         ]
 
         for name, action in cases:
             with self.subTest(name=name):
-                packet = response_packet(status=1)
-                fake = FakeSerial([packet[:4], packet[4:]])
-                loader, _config = self.make_loader(fake)
+                packet = montar_pacote_de_resposta(status=1)
+                fake = SerialSimulada([packet[:4], packet[4:]])
+                loader, _config = criar_carregador(fake)
 
                 with self.assertRaises(CmdExcessao):
                     action(loader)
 
-    def test_serial_asr_returns_payload_when_status_ok(self):
-        packet = response_packet(status=0, data=b'1234567890abcdef')
-        fake = FakeSerial([packet[:4], packet[4:]])
-        loader, _config = self.make_loader(fake)
+    def test_serial_asr_retorna_dados_quando_status_e_valido(self):
+        packet = montar_pacote_de_resposta(status=0, dados=b'1234567890abcdef')
+        fake = SerialSimulada([packet[:4], packet[4:]])
+        loader, _config = criar_carregador(fake)
 
         serial = loader.serial_asr()
 
         self.assertEqual(serial, b'1234567890abcdef')
-        command, payload = self.written_command(fake)
+        command, payload = self.obter_comando_escrito(fake)
         self.assertEqual(command, CMD_SN)
         self.assertEqual(payload, b'')
 
-    def test_set_baudrate_sends_command_and_updates_serial_baudrate(self):
-        packet = response_packet(status=0)
-        fake = FakeSerial([packet[:4], packet[4:]])
-        loader, config = self.make_loader(fake)
+    def test_definir_baudrate_envia_comando_e_atualiza_baudrate_serial(self):
+        packet = montar_pacote_de_resposta(status=0)
+        fake = SerialSimulada([packet[:4], packet[4:]])
+        loader, config = criar_carregador(fake)
 
         loader.set_baudrate(115200)
 
         self.assertEqual(fake.baudrate, 115200)
-        command, payload = self.written_command(fake)
+        command, payload = self.obter_comando_escrito(fake)
         self.assertEqual(command, CMD_BAUDRATE)
         self.assertEqual(payload, struct.pack('<I', 115200))
         self.assertTrue(any('set_baudrate aplicado' in item for item in config.logs))
 
-    def test_set_port_uses_serial_adapter_and_configured_timeout(self):
-        config = DummyConfig()
+    def test_definir_porta_usa_adaptador_serial_e_tempo_limite_configurado(self):
+        config = ConfiguracaoSimulada()
         loader = ASRLoader(config)
-        fake = FakeSerial()
+        fake = SerialSimulada()
 
         with mock.patch('src.ASRLoader.SerialPort', return_value=fake) as serial_port:
             loader.set_port('COM9', 57600)
@@ -366,9 +371,9 @@ class ASRLoaderProtocolTests(unittest.TestCase):
         self.assertIs(loader.ser, fake)
         self.assertTrue(any('porta aberta' in item for item in config.logs))
 
-    def test_hw_reset_boot_sequence_sets_dtr_and_rts_in_order(self):
-        fake = FakeSerial()
-        loader, _config = self.make_loader(fake)
+    def test_sequencia_de_boot_por_reset_define_dtr_e_rts_em_ordem(self):
+        fake = SerialSimulada()
+        loader, _config = criar_carregador(fake)
 
         with mock.patch('src.ASRLoader.time.sleep') as sleep_mock:
             loader.hw_reset(1)
@@ -377,10 +382,10 @@ class ASRLoaderProtocolTests(unittest.TestCase):
         self.assertEqual(fake.rts_states, [True, False])
         sleep_mock.assert_has_calls([mock.call(0.1), mock.call(0.2)])
 
-    def test_conectar_without_auto_boot_only_syncs(self):
-        packet = response_packet(status=0)
-        fake = FakeSerial([packet[:4], packet[4:]])
-        loader, config = self.make_loader(fake)
+    def test_conectar_sem_boot_automatico_apenas_sincroniza(self):
+        packet = montar_pacote_de_resposta(status=0)
+        fake = SerialSimulada([packet[:4], packet[4:]])
+        loader, config = criar_carregador(fake)
         config.auto_boot = False
 
         with contextlib.redirect_stdout(io.StringIO()):
@@ -391,9 +396,9 @@ class ASRLoaderProtocolTests(unittest.TestCase):
         self.assertEqual(fake.flush_output_count, 1)
         self.assertEqual(fake.writes[0][1], CMD_SYNC)
 
-    def test_conectar_retries_and_closes_serial_when_sync_fails(self):
-        fake = FakeSerial([b'', b''])
-        loader, config = self.make_loader(fake)
+    def test_conectar_tenta_novamente_e_fecha_serial_quando_sincronizacao_falha(self):
+        fake = SerialSimulada([b'', b''])
+        loader, config = criar_carregador(fake)
         config.auto_boot = False
 
         with contextlib.redirect_stdout(io.StringIO()):

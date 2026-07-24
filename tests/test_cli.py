@@ -7,27 +7,27 @@ from unittest import mock
 from src.cli import cli_build_parser, main
 
 
-class CliParserTests(unittest.TestCase):
+class TestesDoAnalisadorCli(unittest.TestCase):
     def setUp(self):
-        self.parser = cli_build_parser()
+        self.analisador = cli_build_parser()
 
-    def test_probe_command_is_registered(self):
-        args = self.parser.parse_args(['probe'])
-        self.assertEqual(args.command, 'probe')
+    def test_comando_testeboot_esta_registrado(self):
+        argumentos = self.analisador.parse_args(['testeboot'])
+        self.assertEqual(argumentos.command, 'testeboot')
 
-    def test_clear_eeprom_command_is_registered(self):
-        args = self.parser.parse_args(['clear_eeprom'])
-        self.assertEqual(args.command, 'clear_eeprom')
+    def test_comando_clear_eeprom_esta_registrado(self):
+        argumentos = self.analisador.parse_args(['clear_eeprom'])
+        self.assertEqual(argumentos.command, 'clear_eeprom')
 
-    def test_control_line_command_accepts_hold(self):
-        args = self.parser.parse_args(['dtr1', '--hold', '0.5'])
-        self.assertEqual(args.command, 'dtr1')
-        self.assertEqual(args.control_line, 'dtr')
-        self.assertTrue(args.control_state)
-        self.assertEqual(args.hold, 0.5)
+    def test_comando_de_linha_de_controle_aceita_tempo_de_retencao(self):
+        argumentos = self.analisador.parse_args(['dtr1', '--hold', '0.5'])
+        self.assertEqual(argumentos.command, 'dtr1')
+        self.assertEqual(argumentos.control_line, 'dtr')
+        self.assertFalse(argumentos.control_state)
+        self.assertEqual(argumentos.hold, 0.5)
 
-    def test_global_auto_boot_and_log_options_are_parsed(self):
-        args = self.parser.parse_args([
+    def test_opcoes_globais_de_boot_automatico_e_log_sao_analisadas(self):
+        argumentos = self.analisador.parse_args([
             '--no-auto-boot',
             '--boot-reset-delay',
             '0.25',
@@ -35,52 +35,58 @@ class CliParserTests(unittest.TestCase):
             '0.5',
             '--log-file',
             'debug.log',
-            'probe',
+            'testeboot',
         ])
 
-        self.assertTrue(args.no_auto_boot)
-        self.assertEqual(args.boot_reset_delay, 0.25)
-        self.assertEqual(args.boot_release_delay, 0.5)
-        self.assertEqual(args.log_file, 'debug.log')
+        self.assertTrue(argumentos.no_auto_boot)
+        self.assertEqual(argumentos.boot_reset_delay, 0.25)
+        self.assertEqual(argumentos.boot_release_delay, 0.5)
+        self.assertEqual(argumentos.log_file, 'debug.log')
 
-    def test_dts_alias_is_not_registered(self):
+    def test_alias_dts_nao_esta_registrado(self):
         with contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit):
-                self.parser.parse_args(['dts1'])
+                self.analisador.parse_args(['dts1'])
 
-    def test_diag_json_returns_valid_json_without_hardware_connection(self):
-        stdout = io.StringIO()
-        stderr = io.StringIO()
+    def test_comdiag_json_retorna_json_valido_sem_conexao_com_hardware(self):
+        saida_padrao = io.StringIO()
+        saida_de_erro = io.StringIO()
 
         with mock.patch('src.cli.get_lista_portas_info', return_value=[]):
-            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-                exit_code = main(['diag', '--json'])
+            with contextlib.redirect_stdout(saida_padrao), contextlib.redirect_stderr(
+                saida_de_erro
+            ):
+                codigo_de_saida = main(['comdiag', '--json'])
 
-        self.assertEqual(exit_code, 0)
-        diagnostic = json.loads(stdout.getvalue())
-        self.assertEqual(diagnostic['app'], 'ASR Loader')
-        self.assertIn('python', diagnostic)
-        self.assertEqual(diagnostic['ports'], [])
-        self.assertEqual(stderr.getvalue(), '')
+        self.assertEqual(codigo_de_saida, 0)
+        diagnostico = json.loads(saida_padrao.getvalue())
+        self.assertEqual(diagnostico['app'], 'ASR Loader')
+        self.assertIn('python', diagnostico)
+        self.assertEqual(diagnostico['ports'], [])
+        self.assertEqual(saida_de_erro.getvalue(), '')
 
-    def test_negative_boot_timing_returns_nonzero(self):
-        stdout = io.StringIO()
-        stderr = io.StringIO()
+    def test_tempo_de_boot_negativo_retorna_codigo_diferente_de_zero(self):
+        saida_padrao = io.StringIO()
+        saida_de_erro = io.StringIO()
 
-        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-            exit_code = main(['--boot-reset-delay', '-0.1', 'probe'])
+        with contextlib.redirect_stdout(saida_padrao), contextlib.redirect_stderr(
+            saida_de_erro
+        ):
+            codigo_de_saida = main(['--boot-reset-delay', '-0.1', 'testeboot'])
 
-        self.assertEqual(exit_code, 1)
-        self.assertIn('tempos de boot automatico', stderr.getvalue())
+        self.assertEqual(codigo_de_saida, 1)
+        self.assertIn('tempos de boot automatico', saida_de_erro.getvalue())
 
-    def test_local_command_failure_returns_nonzero(self):
-        stdout = io.StringIO()
-        stderr = io.StringIO()
-        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-            exit_code = main(['ota_pack', 'arquivo_inexistente.bin'])
+    def test_falha_em_comando_local_retorna_codigo_diferente_de_zero(self):
+        saida_padrao = io.StringIO()
+        saida_de_erro = io.StringIO()
+        with contextlib.redirect_stdout(saida_padrao), contextlib.redirect_stderr(
+            saida_de_erro
+        ):
+            codigo_de_saida = main(['ota_pack', 'arquivo_inexistente.bin'])
 
-        self.assertEqual(exit_code, 1)
-        self.assertIn('arquivo nao encontrado', stderr.getvalue())
+        self.assertEqual(codigo_de_saida, 1)
+        self.assertIn('arquivo nao encontrado', saida_de_erro.getvalue())
 
 
 if __name__ == '__main__':

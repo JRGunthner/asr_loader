@@ -20,20 +20,20 @@
 - Adição do comando `hw_reset` para pulsar reset via `RTS` sem precisar sincronizar com o bootloader, com opção `--boot` para acionar `DTR` durante o reset.
 - Adição dos comandos `dtr1`, `dtr0`, `rts1` e `rts0` para testar diretamente as linhas de controle da serial, com opção `--hold`.
 - Documentação no `README.md` do uso de `DTR/RTS`, comandos de teste das linhas e diferenças entre `reset` via software e `hw_reset` via hardware.
-- Adição do comando `diag` para coletar versão, ambiente Python, `pyserial` e detalhes das portas seriais, com opção `--json`.
+- Adição do comando `comdiag` para coletar versão, ambiente Python, `pyserial` e detalhes das portas seriais, com opção `--json`.
 - Correção do registro do comando `clear_eeprom` no parser da CLI.
 - Correção da comparação dos comandos `ota_cript` e `ota_cript_verify` na CLI.
 - Correção de saída hexadecimal para serial e leitura de registrador.
 - Correção do tratamento de erro em `build.py` ao executar comandos externos.
 - Comandos da CLI passam a retornar código de saída `1` em falhas tratadas, facilitando uso em scripts e CI.
 - Adição da opção global `--log-file` para registrar porta usada, sequência `DTR/RTS`, pacotes `TX/RX` e erros.
-- Adição do comando `probe` para testar auto boot e sincronismo sem apagar ou gravar a flash.
+- Adição do comando `testeboot` para testar auto boot e sincronismo sem apagar ou gravar a flash.
 - Adição de testes automatizados sem hardware para parser da CLI e geração/verificação de pacotes OTA.
 - Adição de testes para o protocolo serial, runtime/log, utilitários, comandos puros, helpers de build e geração/verificação de pacotes OTA.
 - Adição da opção global `--trace-json` para registrar eventos estruturados em JSON Lines, incluindo `TX/RX`, status e duração dos comandos.
-- Adição de `probe --sweep` para testar combinações de baudrate e delays de auto boot (`DTR/RTS`) em bancada.
+- Adição de `testeboot --sweep` para testar combinações de baudrate e delays de auto boot (`DTR/RTS`) em bancada.
 - Adição do comando `doctor` para diagnóstico guiado do ambiente, portas seriais e sincronismo opcional com o bootloader.
-- Adição do comando `preflight` e validação prévia automática no `flash` para detectar arquivos ausentes, CRC, tamanho, faixa de endereço e overlaps antes de conectar no hardware.
+- Adição do comando `prevalidar` e validação prévia automática no `flash` para detectar arquivos ausentes, CRC, tamanho, faixa de endereço e overlaps antes de conectar no hardware.
 - Adição do comando `firmware_inspect` para validar localmente firmware raw ou OTA simples, incluindo vector table, MSP, Reset Handler e CRC32.
 - Adição do comando `snapshot` para ler registradores definidos por perfil builtin ou JSON, facilitando coletas repetíveis de estado do firmware.
 - Adição de simulador de bootloader nos testes para validar fluxos reais da CLI sem hardware.

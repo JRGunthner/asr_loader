@@ -3,7 +3,7 @@ import json
 import os
 import pathlib
 import struct
-from typing import Dict, List
+from typing import cast
 
 from .constantes import ASR_APP_FLASH_END, ASR_APP_FLASH_START, ARM_SRAM_END, ARM_SRAM_START, OTA_MAGIC
 
@@ -30,7 +30,7 @@ SNAPSHOT_PROFILES = {
 }
 
 
-def parse_csv_floats(valor: str) -> List[float]:
+def parse_csv_floats(valor: str) -> list[float]:
     itens = [item.strip() for item in valor.split(',') if item.strip()]
     if not itens:
         raise ValueError('lista de tempos vazia')
@@ -43,7 +43,7 @@ def parse_csv_floats(valor: str) -> List[float]:
     return saida
 
 
-def parse_csv_ints(valor: str) -> List[int]:
+def parse_csv_ints(valor: str) -> list[int]:
     itens = [item.strip() for item in valor.split(',') if item.strip()]
     if not itens:
         raise ValueError('lista de valores vazia')
@@ -75,12 +75,12 @@ def _analisar_vetor(nome, valor, app_start, app_end):
         'name': nome,
         'raw': valor,
         'target': destino,
-        'thumb': bool(valor & 0x1),
+        'thumb': bool(valor & 0x01),
         'target_in_app': app_start <= destino < app_end,
     }
 
 
-def analisar_firmware_bytes(dados: bytes, caminho=None, base_address=ASR_APP_FLASH_START) -> Dict:
+def analisar_firmware_bytes(dados: bytes, caminho=None, base_address=ASR_APP_FLASH_START) -> dict:
     formato = 'raw'
     firmware = dados
     warnings = []
@@ -98,10 +98,9 @@ def analisar_firmware_bytes(dados: bytes, caminho=None, base_address=ASR_APP_FLA
             else:
                 warnings.append('header OTA detectado, mas CRC do payload nao confere; analisando como raw')
 
-    checks = []
-    checks.append(_check('firmware_nao_vazio', len(firmware) > 0, 'tamanho=%d bytes' % len(firmware)))
-    checks.append(_check('vector_table_minima', len(firmware) >= 16,
-                         'necessarios ao menos 16 bytes para MSP/Reset/NMI/HardFault'))
+    checks = [_check('firmware_nao_vazio', len(firmware) > 0, 'tamanho=%d bytes' % len(firmware)),
+              _check('vector_table_minima', len(firmware) >= 16,
+                     'necessarios ao menos 16 bytes para MSP/Reset/NMI/HardFault')]
 
     vetores = []
     if len(firmware) >= 16:
@@ -117,9 +116,10 @@ def analisar_firmware_bytes(dados: bytes, caminho=None, base_address=ASR_APP_FLA
                              'MSP=0x%08X, SRAM=%s-%s' % (msp, hex(ARM_SRAM_START), hex(ARM_SRAM_END))))
         checks.append(_check('reset_thumb', vetores[1]['thumb'],
                              'Reset_Handler=0x%08X precisa ter bit Thumb setado' % reset_handler))
+        destino_reset = cast(int, vetores[1]['target'])
         checks.append(_check('reset_na_faixa_app', vetores[1]['target_in_app'],
                              'Reset target=0x%08X, app=%s-%s' % (
-                                 vetores[1]['target'], hex(app_start), hex(app_end))))
+                                 destino_reset, hex(app_start), hex(app_end))))
 
     errors = [item['detail'] for item in checks if not item['ok'] and item['level'] == 'error']
     return {
@@ -135,11 +135,15 @@ def analisar_firmware_bytes(dados: bytes, caminho=None, base_address=ASR_APP_FLA
     }
 
 
-def analisar_firmware(caminho, base_address=ASR_APP_FLASH_START) -> Dict:
-    caminho = pathlib.Path(caminho)
-    if not caminho.is_file():
-        raise Exception('ERROR: arquivo nao encontrado: %s' % caminho)
-    return analisar_firmware_bytes(caminho.read_bytes(), caminho=caminho, base_address=base_address)
+def analisar_firmware(caminho, base_address=ASR_APP_FLASH_START) -> dict:
+    caminho_firmware = pathlib.Path(caminho)
+    if not caminho_firmware.is_file():
+        raise FileNotFoundError('ERROR: arquivo nao encontrado: %s' % caminho_firmware)
+    return analisar_firmware_bytes(
+        caminho_firmware.read_bytes(),
+        caminho=caminho_firmware,
+        base_address=base_address,
+    )
 
 
 def imprimir_relatorio_firmware(relatorio):
@@ -163,7 +167,7 @@ def imprimir_relatorio_firmware(relatorio):
         print('  [%s] %s - %s' % ('OK' if item['ok'] else item['level'].upper(), item['name'], item['detail']))
 
 
-def montar_preflight_flash(addr_file, strict_app_range=False) -> Dict:
+def montar_prevalidar_flash(addr_file, strict_app_range=False) -> dict:
     erros = []
     avisos = []
     itens = []
@@ -177,7 +181,7 @@ def montar_preflight_flash(addr_file, strict_app_range=False) -> Dict:
         caminho_texto = addr_file[indice + 1]
         try:
             endereco = int(endereco_texto, 0)
-        except Exception:
+        except ValueError:
             erros.append('o endereco "%s" deve ser um numero' % endereco_texto)
             continue
 
@@ -222,8 +226,8 @@ def montar_preflight_flash(addr_file, strict_app_range=False) -> Dict:
     }
 
 
-def imprimir_preflight_flash(relatorio):
-    print('Preflight flash:')
+def imprimir_prevalidar_flash(relatorio):
+    print('Pré-validação da flash:')
     for item in relatorio['items']:
         print('  0x%08X-0x%08X  %8d bytes  CRC32=0x%08X  %s' % (
             item['address'],
@@ -245,17 +249,18 @@ def carregar_snapshot_profile(profile):
         dados = json.loads(caminho.read_text(encoding='utf-8'))
     else:
         if profile not in SNAPSHOT_PROFILES:
-            raise Exception('ERROR: perfil de snapshot nao encontrado: %s' % profile)
+            raise ValueError('ERROR: perfil de snapshot nao encontrado: %s' % profile)
         dados = SNAPSHOT_PROFILES[profile]
 
     registros = []
     for item in dados.get('registers', []):
+        endereco = item['address']
         registros.append({
             'name': item['name'],
-            'address': int(item['address'], 0) if isinstance(item['address'], str) else int(item['address']),
+            'address': int(endereco, 0) if isinstance(endereco, str) else endereco,
         })
     if not registros:
-        raise Exception('ERROR: perfil de snapshot sem registros')
+        raise ValueError('ERROR: perfil de snapshot sem registros')
     return {
         'name': profile,
         'description': dados.get('description', ''),

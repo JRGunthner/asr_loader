@@ -20,10 +20,10 @@ from .constantes import (
 from .diagnosticos import (
     analisar_firmware,
     carregar_snapshot_profile,
-    imprimir_preflight_flash,
+    imprimir_prevalidar_flash,
     imprimir_relatorio_firmware,
     imprimir_snapshot,
-    montar_preflight_flash,
+    montar_prevalidar_flash,
     parse_csv_floats,
     parse_csv_ints,
 )
@@ -80,18 +80,18 @@ def _asr_conectar_quiet(processador, lista_portas, baud, quiet=False):
     return asr_conectar(processador, lista_portas, baud)
 
 
-def asr_preflight_flash(param):
-    relatorio = montar_preflight_flash(
+def asr_prevalidar_flash(param):
+    relatorio = montar_prevalidar_flash(
         param.addr_file,
         strict_app_range=getattr(param, 'strict_app_range', False),
     )
     if getattr(param, 'json', False):
         print(json.dumps(relatorio, indent=2, ensure_ascii=False))
     else:
-        imprimir_preflight_flash(relatorio)
+        imprimir_prevalidar_flash(relatorio)
 
     if relatorio['errors']:
-        raise Exception('ERROR: preflight falhou: %s' % '; '.join(relatorio['errors']))
+        raise Exception('ERROR: pré-validação falhou: %s' % '; '.join(relatorio['errors']))
     return relatorio
 
 
@@ -148,17 +148,20 @@ def asr_clean_eeprom(param, processador, config):
 
 
 def asr_flash(param, processador, config):
-    relatorio_preflight = montar_preflight_flash(param.addr_file)
-    if relatorio_preflight['errors']:
-        imprimir_preflight_flash(relatorio_preflight)
-        raise Exception('ERROR: preflight falhou: %s' % '; '.join(relatorio_preflight['errors']))
-    print('Preflight OK: %d arquivo(s), %d bytes' % (
-        len(relatorio_preflight['items']),
-        relatorio_preflight['total_size'],
+    relatorio_prevalidar = montar_prevalidar_flash(param.addr_file)
+    if relatorio_prevalidar['errors']:
+        imprimir_prevalidar_flash(relatorio_prevalidar)
+        raise Exception('ERROR: pré-validação falhou: %s' % '; '.join(relatorio_prevalidar['errors']))
+    quantidade_arquivos = len(relatorio_prevalidar['items'])
+    rotulo_arquivo = 'arquivo' if quantidade_arquivos == 1 else 'arquivos'
+    print('Pré-validação TRI: %d %s, %d bytes' % (
+        quantidade_arquivos,
+        rotulo_arquivo,
+        relatorio_prevalidar['total_size'],
     ))
-    for aviso in relatorio_preflight['warnings']:
+    for aviso in relatorio_prevalidar['warnings']:
         print('Aviso: %s' % aviso)
-    arquivos = [(item['address'], item['path']) for item in relatorio_preflight['items']]
+    arquivos = [(item['address'], item['path']) for item in relatorio_prevalidar['items']]
 
     if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return False
@@ -351,7 +354,7 @@ def asr_probe_sweep(param, processador_factory, config):
     if getattr(param, 'json', False):
         print(json.dumps({'results': resultados}, indent=2, ensure_ascii=False))
     else:
-        print('Probe sweep:')
+        print('Teste de boot sweep:')
         for item in resultados:
             print('  %-4s baud=%d reset=%.3fs release=%.3fs dur=%.3fms %s' % (
                 'OK' if item['ok'] else 'FAIL',
@@ -363,7 +366,7 @@ def asr_probe_sweep(param, processador_factory, config):
             ))
 
     if not any(item['ok'] for item in resultados):
-        raise CmdExcessao('ERROR: probe sweep falhou em todas as combinacoes')
+        raise CmdExcessao('ERROR: teste de boot sweep falhou em todas as combinacoes')
     return resultados
 
 

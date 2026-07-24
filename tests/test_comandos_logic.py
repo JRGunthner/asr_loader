@@ -20,111 +20,118 @@ from src.constantes import EEPROM_ENDERECO_ASR6601CB, EEPROM_ENDERECO_ASR6601SE,
 from src.exceptions import CmdExcessao
 
 
-class FakeCloseSerial:
-    def __init__(self, fail_on_close=False):
-        self.fail_on_close = fail_on_close
-        self.closed = False
+class SerialDeFechamentoSimulada:
+    def __init__(self, falhar_ao_fechar=False):
+        self.falhar_ao_fechar = falhar_ao_fechar
+        self.fechada = False
 
     def close(self):
-        self.closed = True
-        if self.fail_on_close:
+        self.fechada = True
+        if self.falhar_ao_fechar:
             raise OSError('already gone')
 
 
-class FakeProcessor:
-    def __init__(self, fail_connect_ports=None, fail_erase_addrs=None, reg_values=None):
+class ProcessadorSimulado:
+    def __init__(
+        self,
+        portas_com_falha_de_conexao=None,
+        enderecos_com_falha_de_apagamento=None,
+        valores_de_registradores=None,
+    ):
         self.ser = None
-        self.current_port = None
-        self.ports = []
-        self.connected_ports = []
+        self.porta_atual = None
+        self.portas = []
+        self.portas_conectadas = []
         self.baudrates = []
-        self.dtr_states = []
-        self.rts_states = []
-        self.hw_reset_modes = []
-        self.erase_calls = []
-        self.reg_reads = []
-        self.fail_connect_ports = set(fail_connect_ports or [])
-        self.fail_erase_addrs = set(fail_erase_addrs or [])
-        self.reg_values = dict(reg_values or {})
+        self.estados_dtr = []
+        self.estados_rts = []
+        self.modos_de_reset = []
+        self.chamadas_de_apagamento = []
+        self.leituras_de_registradores = []
+        self.portas_com_falha_de_conexao = set(portas_com_falha_de_conexao or [])
+        self.enderecos_com_falha_de_apagamento = set(
+            enderecos_com_falha_de_apagamento or []
+        )
+        self.valores_de_registradores = dict(valores_de_registradores or {})
 
     def set_port(self, port, baud=None):
-        self.current_port = port
-        self.ports.append((port, baud))
-        self.ser = FakeCloseSerial()
+        self.porta_atual = port
+        self.portas.append((port, baud))
+        self.ser = SerialDeFechamentoSimulada()
 
     def conectar(self):
-        self.connected_ports.append(self.current_port)
-        if self.current_port in self.fail_connect_ports:
+        self.portas_conectadas.append(self.porta_atual)
+        if self.porta_atual in self.portas_com_falha_de_conexao:
             raise Exception('connect failed')
 
     def set_baudrate(self, baud):
         self.baudrates.append(baud)
 
     def erase(self, address, size):
-        self.erase_calls.append((address, size))
-        if address in self.fail_erase_addrs:
+        self.chamadas_de_apagamento.append((address, size))
+        if address in self.enderecos_com_falha_de_apagamento:
             raise Exception('erase failed')
 
     def ler_reg(self, address):
-        self.reg_reads.append(address)
-        return (self.reg_values[address],)
+        self.leituras_de_registradores.append(address)
+        return (self.valores_de_registradores[address],)
 
     def set_dtr(self, state):
-        self.dtr_states.append(state)
+        self.estados_dtr.append(state)
 
     def set_rts(self, state):
-        self.rts_states.append(state)
+        self.estados_rts.append(state)
 
     def hw_reset(self, mode):
-        self.hw_reset_modes.append(mode)
+        self.modos_de_reset.append(mode)
 
 
-class ComandosLogicTests(unittest.TestCase):
-    def test_asr_fechar_porta_closes_and_clears_serial(self):
-        processador = SimpleNamespace(ser=FakeCloseSerial())
-
-        asr_fechar_porta(processador)
-
-        self.assertIsNone(processador.ser)
-
-    def test_asr_fechar_porta_ignores_close_oserror(self):
-        processador = SimpleNamespace(ser=FakeCloseSerial(fail_on_close=True))
+class TestesDaLogicaDosComandos(unittest.TestCase):
+    def test_asr_fechar_porta_fecha_e_limpa_serial(self):
+        processador = SimpleNamespace(ser=SerialDeFechamentoSimulada())
 
         asr_fechar_porta(processador)
 
         self.assertIsNone(processador.ser)
 
-    def test_asr_conectar_tries_ports_in_reverse_order_until_success(self):
-        processador = FakeProcessor(fail_connect_ports={'COM2'})
+    def test_asr_fechar_porta_ignora_erro_do_sistema_ao_fechar(self):
+        processador = SimpleNamespace(ser=SerialDeFechamentoSimulada(falhar_ao_fechar=True))
+
+        asr_fechar_porta(processador)
+
+        self.assertIsNone(processador.ser)
+
+    def test_asr_conectar_tenta_portas_em_ordem_inversa_ate_obter_sucesso(self):
+        processador = ProcessadorSimulado(portas_com_falha_de_conexao={'COM2'})
 
         with contextlib.redirect_stdout(io.StringIO()):
-            result = asr_conectar(processador, ['COM1', 'COM2'], 115200)
+            resultado = asr_conectar(processador, ['COM1', 'COM2'], 115200)
 
-        self.assertTrue(result)
-        self.assertEqual(processador.connected_ports, ['COM2', 'COM1'])
+        self.assertTrue(resultado)
+        self.assertEqual(processador.portas_conectadas, ['COM2', 'COM1'])
         self.assertEqual(processador.baudrates, [115200])
 
-    def test_asr_conectar_raises_when_no_ports_are_available(self):
+    def test_asr_conectar_lanca_excecao_quando_nao_ha_portas_disponiveis(self):
         with self.assertRaisesRegex(CmdExcessao, 'nenhuma porta serial'):
-            asr_conectar(FakeProcessor(), [], 115200)
+            asr_conectar(ProcessadorSimulado(), [], 115200)
 
-    def test_asr_conectar_raises_after_all_ports_fail(self):
-        processador = FakeProcessor(fail_connect_ports={'COM1', 'COM2'})
+    def test_asr_conectar_lanca_excecao_apos_falha_em_todas_as_portas(self):
+        processador = ProcessadorSimulado(portas_com_falha_de_conexao={'COM1', 'COM2'})
 
         with contextlib.redirect_stdout(io.StringIO()):
             with self.assertRaisesRegex(CmdExcessao, 'nao foi possivel conectar'):
                 asr_conectar(processador, ['COM1', 'COM2'], 115200)
 
-        self.assertEqual(processador.connected_ports, ['COM2', 'COM1'])
+        self.assertEqual(processador.portas_conectadas, ['COM2', 'COM1'])
 
-    def test_hexdump_formats_address_hex_and_ascii(self):
-        dump = asr_formatar_hexdump(0x20000000, b'ABC\x00\xff')
+    def test_hexdump_formata_endereco_hexadecimal_e_ascii(self):
+        hexdump = asr_formatar_hexdump(0x20000000, b'ABC\x00\xff')
 
-        self.assertIn('20000000', dump)
-        self.assertIn('41 42 43 00 FF', dump)
-        self.assertIn('|ABC..|', dump)
+        self.assertIn('20000000', hexdump)
+        self.assertIn('41 42 43 00 FF', hexdump)
+        self.assertIn('|ABC..|', hexdump)
 
-    def test_address_range_helpers_cover_boundaries(self):
+    def test_auxiliares_de_faixa_de_enderecos_cobrem_limites(self):
         self.assertTrue(asr_endereco_em_faixa_app(0x08000000))
         self.assertTrue(asr_endereco_em_faixa_app(0x0803FFFF))
         self.assertFalse(asr_endereco_em_faixa_app(0x08040000))
@@ -132,98 +139,109 @@ class ComandosLogicTests(unittest.TestCase):
         self.assertTrue(asr_endereco_em_sram(0x3FFFFFFF))
         self.assertFalse(asr_endereco_em_sram(0x40000000))
 
-    def test_ler_mem_reads_aligned_words_and_returns_requested_slice(self):
-        processador = FakeProcessor(reg_values={
+    def test_ler_mem_le_palavras_alinhadas_e_retorna_fatia_solicitada(self):
+        processador = ProcessadorSimulado(valores_de_registradores={
             0x20000000: 0x04030201,
             0x20000004: 0x08070605,
         })
-        config = SimpleNamespace(portas_disponiveis=['COM1'])
-        param = SimpleNamespace(address=0x20000001, size=5, baud=921600, output=None)
+        configuracao = SimpleNamespace(portas_disponiveis=['COM1'])
+        parametros = SimpleNamespace(address=0x20000001, size=5, baud=921600, output=None)
 
         with contextlib.redirect_stdout(io.StringIO()):
-            dados = asr_ler_mem(param, processador, config)
+            dados = asr_ler_mem(parametros, processador, configuracao)
 
         self.assertEqual(dados, b'\x02\x03\x04\x05\x06')
-        self.assertEqual(processador.reg_reads, [0x20000000, 0x20000004])
+        self.assertEqual(processador.leituras_de_registradores, [0x20000000, 0x20000004])
 
-    def test_ler_mem_can_write_raw_dump_to_file(self):
-        processador = FakeProcessor(reg_values={0x20000000: 0x04030201})
-        config = SimpleNamespace(portas_disponiveis=['COM1'])
+    def test_ler_mem_pode_escrever_dados_brutos_em_arquivo(self):
+        processador = ProcessadorSimulado(
+            valores_de_registradores={0x20000000: 0x04030201}
+        )
+        configuracao = SimpleNamespace(portas_disponiveis=['COM1'])
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            output = Path(temp_dir) / 'dump.bin'
-            param = SimpleNamespace(address=0x20000000, size=4, baud=921600, output=str(output))
+        with tempfile.TemporaryDirectory() as diretorio_temporario:
+            arquivo_de_saida = Path(diretorio_temporario) / 'dump.bin'
+            parametros = SimpleNamespace(
+                address=0x20000000, size=4, baud=921600, output=str(arquivo_de_saida)
+            )
             with contextlib.redirect_stdout(io.StringIO()):
-                dados = asr_ler_mem(param, processador, config)
-            self.assertEqual(output.read_bytes(), dados)
+                dados = asr_ler_mem(parametros, processador, configuracao)
+            self.assertEqual(arquivo_de_saida.read_bytes(), dados)
 
         self.assertEqual(dados, b'\x01\x02\x03\x04')
 
-    def test_ler_mem_rejects_non_positive_size_before_connecting(self):
-        processador = FakeProcessor()
-        config = SimpleNamespace(portas_disponiveis=['COM1'])
-        param = SimpleNamespace(address=0x20000000, size=0, baud=921600, output=None)
+    def test_ler_mem_rejeita_tamanho_nao_positivo_antes_de_conectar(self):
+        processador = ProcessadorSimulado()
+        configuracao = SimpleNamespace(portas_disponiveis=['COM1'])
+        parametros = SimpleNamespace(address=0x20000000, size=0, baud=921600, output=None)
 
         with self.assertRaisesRegex(Exception, 'tamanho'):
-            asr_ler_mem(param, processador, config)
+            asr_ler_mem(parametros, processador, configuracao)
 
-        self.assertEqual(processador.ports, [])
+        self.assertEqual(processador.portas, [])
 
-    def test_apagar_eeprom_detects_successful_variant(self):
-        processador = FakeProcessor(fail_erase_addrs={EEPROM_ENDERECO_ASR6601CB})
+    def test_apagar_eeprom_detecta_variante_bem_sucedida(self):
+        processador = ProcessadorSimulado(
+            enderecos_com_falha_de_apagamento={EEPROM_ENDERECO_ASR6601CB}
+        )
 
-        stdout = io.StringIO()
-        with contextlib.redirect_stdout(stdout):
+        saida_padrao = io.StringIO()
+        with contextlib.redirect_stdout(saida_padrao):
             asr_apagar_eeprom(processador)
 
-        self.assertEqual(processador.erase_calls, [
+        self.assertEqual(processador.chamadas_de_apagamento, [
             (EEPROM_ENDERECO_ASR6601CB, EEPROM_SIZE),
             (EEPROM_ENDERECO_ASR6601SE, EEPROM_SIZE),
         ])
-        self.assertIn('ASR6601SE', stdout.getvalue())
+        self.assertIn('ASR6601SE', saida_padrao.getvalue())
 
-    def test_apagar_eeprom_raises_when_all_mappings_fail(self):
-        processador = FakeProcessor(fail_erase_addrs={EEPROM_ENDERECO_ASR6601CB, EEPROM_ENDERECO_ASR6601SE})
+    def test_apagar_eeprom_lanca_excecao_quando_todos_os_mapeamentos_falham(self):
+        processador = ProcessadorSimulado(
+            enderecos_com_falha_de_apagamento={
+                EEPROM_ENDERECO_ASR6601CB,
+                EEPROM_ENDERECO_ASR6601SE,
+            }
+        )
 
         with contextlib.redirect_stdout(io.StringIO()):
             with self.assertRaisesRegex(Exception, 'todos os mapeamentos'):
                 asr_apagar_eeprom(processador)
 
-    def test_controlar_linha_serial_sets_dtr_and_closes_port(self):
-        processador = FakeProcessor()
-        config = SimpleNamespace(portas_disponiveis=['COM3'])
-        param = SimpleNamespace(baud=57600, control_line='dtr', control_state=True, hold=0)
+    def test_controlar_linha_serial_define_dtr_e_fecha_porta(self):
+        processador = ProcessadorSimulado()
+        configuracao = SimpleNamespace(portas_disponiveis=['COM3'])
+        parametros = SimpleNamespace(baud=57600, control_line='dtr', control_state=True, hold=0)
 
         with contextlib.redirect_stdout(io.StringIO()):
-            result = asr_controlar_linha_serial(param, processador, config)
+            resultado = asr_controlar_linha_serial(parametros, processador, configuracao)
 
-        self.assertTrue(result)
-        self.assertEqual(processador.ports, [('COM3', 57600)])
-        self.assertEqual(processador.dtr_states, [True])
-        self.assertEqual(processador.rts_states, [])
+        self.assertTrue(resultado)
+        self.assertEqual(processador.portas, [('COM3', 57600)])
+        self.assertEqual(processador.estados_dtr, [True])
+        self.assertEqual(processador.estados_rts, [])
         self.assertIsNone(processador.ser)
 
-    def test_controlar_linha_serial_rejects_negative_hold(self):
-        processador = FakeProcessor()
-        config = SimpleNamespace(portas_disponiveis=['COM3'])
-        param = SimpleNamespace(baud=57600, control_line='dtr', control_state=True, hold=-1)
+    def test_controlar_linha_serial_rejeita_tempo_de_retencao_negativo(self):
+        processador = ProcessadorSimulado()
+        configuracao = SimpleNamespace(portas_disponiveis=['COM3'])
+        parametros = SimpleNamespace(baud=57600, control_line='dtr', control_state=True, hold=-1)
 
         with self.assertRaisesRegex(Exception, '--hold'):
-            asr_controlar_linha_serial(param, processador, config)
+            asr_controlar_linha_serial(parametros, processador, configuracao)
 
-        self.assertEqual(processador.ports, [])
+        self.assertEqual(processador.portas, [])
 
-    def test_hw_reset_uses_selected_port_and_closes_after_pulse(self):
-        processador = FakeProcessor()
-        config = SimpleNamespace(portas_disponiveis=['COM4'])
-        param = SimpleNamespace(baud=115200, boot=True)
+    def test_reset_de_hardware_usa_porta_selecionada_e_fecha_apos_pulso(self):
+        processador = ProcessadorSimulado()
+        configuracao = SimpleNamespace(portas_disponiveis=['COM4'])
+        parametros = SimpleNamespace(baud=115200, boot=True)
 
         with contextlib.redirect_stdout(io.StringIO()):
-            result = asr_hw_reset(param, processador, config)
+            resultado = asr_hw_reset(parametros, processador, configuracao)
 
-        self.assertTrue(result)
-        self.assertEqual(processador.ports, [('COM4', 115200)])
-        self.assertEqual(processador.hw_reset_modes, [1])
+        self.assertTrue(resultado)
+        self.assertEqual(processador.portas, [('COM4', 115200)])
+        self.assertEqual(processador.modos_de_reset, [1])
         self.assertIsNone(processador.ser)
 
 

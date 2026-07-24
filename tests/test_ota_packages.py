@@ -21,48 +21,54 @@ from src.ota_pacote_cripto import (
 )
 
 
-class OtaPackageTests(unittest.TestCase):
-    def test_ota_pack_command_builds_valid_simple_package(self):
+class TestesDosPacotesOta(unittest.TestCase):
+    def test_comando_ota_pack_monta_pacote_simples_valido(self):
         firmware = bytes(range(64))
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            firmware_path = Path(temp_dir) / 'app.bin'
-            output_path = Path(temp_dir) / 'app_ota.bin'
-            firmware_path.write_bytes(firmware)
+        with tempfile.TemporaryDirectory() as diretorio_temporario:
+            caminho_firmware = Path(diretorio_temporario) / 'app.bin'
+            caminho_saida = Path(diretorio_temporario) / 'app_ota.bin'
+            caminho_firmware.write_bytes(firmware)
 
-            args = SimpleNamespace(firmware=str(firmware_path), output=str(output_path))
+            argumentos = SimpleNamespace(
+                firmware=str(caminho_firmware), output=str(caminho_saida)
+            )
             with contextlib.redirect_stdout(io.StringIO()):
-                asr_ota_pack(args)
+                asr_ota_pack(argumentos)
 
-            info = asr_ota_pack_ler_info(str(output_path))
-            self.assertEqual(info['firmware'], firmware)
-            self.assertEqual(info['fw_size'], len(firmware))
-            self.assertEqual(info['reservado'], 0)
+            informacoes = asr_ota_pack_ler_info(str(caminho_saida))
+            self.assertEqual(informacoes['firmware'], firmware)
+            self.assertEqual(informacoes['fw_size'], len(firmware))
+            self.assertEqual(informacoes['reservado'], 0)
 
-    def test_signed_package_roundtrip(self):
+    def test_pacote_assinado_completa_ciclo_de_ida_e_volta(self):
         firmware = b'firmware de teste assinado'
-        key = bytes(range(16))
+        chave = bytes(range(16))
 
-        package = build_ota_assinado_package(firmware, firmware_version=7, key=key)
-        size, version, auth_tag = ota_assinado_verify_package(package, key)
+        pacote = build_ota_assinado_package(firmware, firmware_version=7, key=chave)
+        tamanho, versao, etiqueta_de_autenticacao = ota_assinado_verify_package(
+            pacote, chave
+        )
 
-        self.assertEqual(size, len(firmware))
-        self.assertEqual(version, 7)
-        self.assertEqual(len(auth_tag), 16)
+        self.assertEqual(tamanho, len(firmware))
+        self.assertEqual(versao, 7)
+        self.assertEqual(len(etiqueta_de_autenticacao), 16)
 
-    def test_signed_package_rejects_tampered_payload(self):
+    def test_pacote_assinado_rejeita_conteudo_adulterado(self):
         firmware = b'firmware de teste assinado'
-        key = bytes(range(16))
-        package = bytearray(build_ota_assinado_package(firmware, firmware_version=7, key=key))
-        package[20] ^= 0x01
+        chave = bytes(range(16))
+        pacote = bytearray(
+            build_ota_assinado_package(firmware, firmware_version=7, key=chave)
+        )
+        pacote[20] ^= 0x01
 
         with self.assertRaises(ValueError):
-            ota_assinado_verify_package(bytes(package), key)
+            ota_assinado_verify_package(bytes(pacote), chave)
 
-    def test_parse_key_from_header_accepts_multiline_decimal_and_c_suffixes(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            header = Path(temp_dir) / 'boot_security_config.h'
-            header.write_text(
+    def test_analisar_chave_do_cabecalho_aceita_decimal_multilinha_e_sufixos_c(self):
+        with tempfile.TemporaryDirectory() as diretorio_temporario:
+            cabecalho = Path(diretorio_temporario) / 'boot_security_config.h'
+            cabecalho.write_text(
                 '#define BOOT_SECURITY_KEY_BYTES { \\\n'
                 '    0x00U, 1, 0x02UL, 3U, \\\n'
                 '    4, 5, 6, 7, \\\n'
@@ -72,74 +78,87 @@ class OtaPackageTests(unittest.TestCase):
                 encoding='utf-8',
             )
 
-            key = parse_key_from_header(header)
+            chave = parse_key_from_header(cabecalho)
 
-        self.assertEqual(key, bytes(range(16)))
+        self.assertEqual(chave, bytes(range(16)))
 
-    def test_parse_key_from_header_rejects_wrong_number_of_bytes(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            header = Path(temp_dir) / 'boot_security_config.h'
-            header.write_text('#define BOOT_SECURITY_KEY_BYTES { 0x00, 0x01 }\n', encoding='utf-8')
+    def test_analisar_chave_do_cabecalho_rejeita_quantidade_incorreta_de_bytes(self):
+        with tempfile.TemporaryDirectory() as diretorio_temporario:
+            cabecalho = Path(diretorio_temporario) / 'boot_security_config.h'
+            cabecalho.write_text(
+                '#define BOOT_SECURITY_KEY_BYTES { 0x00, 0x01 }\n',
+                encoding='utf-8',
+            )
 
             with self.assertRaisesRegex(ValueError, 'Esperados 16 bytes'):
-                parse_key_from_header(header)
+                parse_key_from_header(cabecalho)
 
-    def test_split_ota_tche_suffix_accepts_plain_and_suffixed_packages(self):
-        package = b'abc'
+    def test_separar_sufixo_ota_tche_aceita_pacotes_simples_e_com_sufixo(self):
+        pacote = b'abc'
 
-        self.assertEqual(split_ota_tche_sufixo(package, 3), package)
-        self.assertEqual(split_ota_tche_sufixo(append_ota_tche_sufixo(package), 3), package)
+        self.assertEqual(split_ota_tche_sufixo(pacote, 3), pacote)
+        self.assertEqual(
+            split_ota_tche_sufixo(append_ota_tche_sufixo(pacote), 3), pacote
+        )
 
         with self.assertRaisesRegex(ValueError, 'Tamanho total invalido'):
-            split_ota_tche_sufixo(package + b'x', 3)
+            split_ota_tche_sufixo(pacote + b'x', 3)
 
-    def test_encrypted_package_roundtrip(self):
+    def test_pacote_criptografado_completa_ciclo_de_ida_e_volta(self):
         firmware = b'firmware de teste criptografado'
-        key = bytes(range(16))
+        chave = bytes(range(16))
         nonce = b'12345678'
 
-        package = montar_pacote_seguro(firmware, versao_firmware=9, chave=key, nonce=nonce)
-        parsed, plaintext = verificar_pacote_seguro(package, key)
+        pacote = montar_pacote_seguro(
+            firmware, versao_firmware=9, chave=chave, nonce=nonce
+        )
+        pacote_analisado, texto_simples = verificar_pacote_seguro(pacote, chave)
 
-        self.assertEqual(plaintext, firmware)
-        self.assertEqual(parsed.versao_firmware, 9)
-        self.assertEqual(parsed.nonce, nonce)
+        self.assertEqual(texto_simples, firmware)
+        self.assertEqual(pacote_analisado.versao_firmware, 9)
+        self.assertEqual(pacote_analisado.nonce, nonce)
 
-    def test_encrypted_package_rejects_invalid_nonce_size(self):
+    def test_pacote_criptografado_rejeita_tamanho_invalido_de_nonce(self):
         with self.assertRaisesRegex(ValueError, 'nonce'):
             montar_pacote_seguro(b'fw', versao_firmware=1, chave=bytes(range(16)), nonce=b'curto')
 
-    def test_encrypted_package_rejects_tampered_ciphertext(self):
+    def test_pacote_criptografado_rejeita_texto_cifrado_adulterado(self):
         firmware = b'firmware de teste criptografado'
-        key = bytes(range(16))
-        package = bytearray(montar_pacote_seguro(firmware, versao_firmware=9, chave=key, nonce=b'12345678'))
-        package[16] ^= 0x01
+        chave = bytes(range(16))
+        pacote = bytearray(
+            montar_pacote_seguro(
+                firmware, versao_firmware=9, chave=chave, nonce=b'12345678'
+            )
+        )
+        pacote[16] ^= 0x01
 
         with self.assertRaisesRegex(ValueError, 'auth_tag'):
-            verificar_pacote_seguro(bytes(package), key)
+            verificar_pacote_seguro(bytes(pacote), chave)
 
-    def test_secure_verify_accepts_legacy_signed_package(self):
+    def test_verificacao_segura_aceita_pacote_assinado_legado(self):
         firmware = b'legacy assinado'
-        key = bytes(range(16))
-        package = build_ota_assinado_package(firmware, firmware_version=3, key=key)
+        chave = bytes(range(16))
+        pacote = build_ota_assinado_package(
+            firmware, firmware_version=3, key=chave
+        )
 
-        parsed, plaintext = verificar_pacote_seguro(package, key)
+        pacote_analisado, texto_simples = verificar_pacote_seguro(pacote, chave)
 
-        self.assertEqual(plaintext, firmware)
-        self.assertEqual(parsed.versao_trailer, 1)
+        self.assertEqual(texto_simples, firmware)
+        self.assertEqual(pacote_analisado.versao_trailer, 1)
 
-    def test_siphash_ctr_xor_is_reversible(self):
+    def test_siphash_ctr_xor_e_reversivel(self):
         firmware = b'payload claro'
-        key = bytes(range(16))
+        chave = bytes(range(16))
         nonce = b'12345678'
 
-        ciphertext = aplicar_siphash64_ctr_xor(firmware, key, nonce)
-        plaintext = aplicar_siphash64_ctr_xor(ciphertext, key, nonce)
+        texto_cifrado = aplicar_siphash64_ctr_xor(firmware, chave, nonce)
+        texto_simples = aplicar_siphash64_ctr_xor(texto_cifrado, chave, nonce)
 
-        self.assertNotEqual(ciphertext, firmware)
-        self.assertEqual(plaintext, firmware)
+        self.assertNotEqual(texto_cifrado, firmware)
+        self.assertEqual(texto_simples, firmware)
 
-    def test_default_secure_output_path_preserves_suffix_or_uses_bin(self):
+    def test_caminho_padrao_de_saida_segura_preserva_sufixo_ou_usa_bin(self):
         self.assertEqual(caminho_saida_segura_padrao(Path('app')), Path('app_ota_cript.bin'))
         self.assertEqual(caminho_saida_segura_padrao(Path('app.hex')), Path('app_ota_cript.hex'))
 
