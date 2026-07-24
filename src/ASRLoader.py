@@ -269,18 +269,21 @@ class ASRLoader(object):
             raise CmdExcessao("ERROR: timeout leitura do header response")
         start, status, rsp_data_len = struct.unpack('<BBH', header)
         if start != 0xFE:
-            self._trace_serial_result(status=status, rx_len=len(header), rx_hex=binascii.hexlify(header).decode('ascii'),
+            self._trace_serial_result(status=status, rx_len=len(header),
+                                      rx_hex=binascii.hexlify(header).decode('ascii'),
                                       error='bad_start_marker')
             raise CmdExcessao("ERROR: pacote de resposta errado")
         if rsp_data_len > 512:
-            self._trace_serial_result(status=status, rx_len=len(header), rx_hex=binascii.hexlify(header).decode('ascii'),
+            self._trace_serial_result(status=status, rx_len=len(header),
+                                      rx_hex=binascii.hexlify(header).decode('ascii'),
                                       error='oversized_payload')
             raise CmdExcessao("ERROR: tamanho do pacote de resposta errado")
 
         remain_data = self.ser.read(rsp_data_len + 5)
         if remain_data == b'':
             self.config.log('Rx timeout dados')
-            self._trace_serial_result(status=status, rx_len=len(header), rx_hex=binascii.hexlify(header).decode('ascii'),
+            self._trace_serial_result(status=status, rx_len=len(header),
+                                      rx_hex=binascii.hexlify(header).decode('ascii'),
                                       error='timeout_data')
             raise CmdExcessao("ERROR: timeout leitura de dados")
 

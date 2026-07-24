@@ -1,3 +1,1 @@
-"""Pacote interno do Tremo Loader."""
-
-
+"""Pacote interno do ASR Loader."""

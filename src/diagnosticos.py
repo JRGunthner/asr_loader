@@ -7,7 +7,6 @@ from typing import cast
 
 from .constantes import ASR_APP_FLASH_END, ASR_APP_FLASH_START, ARM_SRAM_END, ARM_SRAM_START, OTA_MAGIC
 
-
 SNAPSHOT_PROFILES = {
     'asr6601': {
         'description': 'Snapshot basico da vector table da aplicacao ASR6601',

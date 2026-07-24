@@ -1,4 +1,4 @@
-## v1.3 - Unreleased
+## v1.3 - 2026-07-24
 - Adição do comando para gerar a versão de firmware OTA
 - Adicionado endereço da eeprom do ASR6601SE
 - Correção do bug da mensagem de erro de gravação sempre concluída
@@ -37,6 +37,7 @@
 - Adição do comando `firmware_inspect` para validar localmente firmware raw ou OTA simples, incluindo vector table, MSP, Reset Handler e CRC32.
 - Adição do comando `snapshot` para ler registradores definidos por perfil builtin ou JSON, facilitando coletas repetíveis de estado do firmware.
 - Adição de simulador de bootloader nos testes para validar fluxos reais da CLI sem hardware.
+- Release
 
 ## v1.2 - 2025-10-07
 - Estruturação modular da aplicação em `src/`, separando CLI, comandos, protocolo, constantes, utilitários e runtime.
