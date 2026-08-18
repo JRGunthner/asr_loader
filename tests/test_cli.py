@@ -23,8 +23,14 @@ class TestesDoAnalisadorCli(unittest.TestCase):
         argumentos = self.analisador.parse_args(['dtr1', '--hold', '0.5'])
         self.assertEqual(argumentos.command, 'dtr1')
         self.assertEqual(argumentos.control_line, 'dtr')
-        self.assertFalse(argumentos.control_state)
+        self.assertTrue(argumentos.control_state)
         self.assertEqual(argumentos.hold, 0.5)
+
+    def test_comando_dtr0_define_estado_baixo(self):
+        argumentos = self.analisador.parse_args(['dtr0'])
+        self.assertEqual(argumentos.command, 'dtr0')
+        self.assertEqual(argumentos.control_line, 'dtr')
+        self.assertFalse(argumentos.control_state)
 
     def test_opcoes_globais_de_boot_automatico_e_log_sao_analisadas(self):
         argumentos = self.analisador.parse_args([

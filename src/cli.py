@@ -367,10 +367,10 @@ def cli_build_parser():
                                             help='resetar o ASR via linha RTS sem conectar no bootloader')
     parser_hw_reset.add_argument('--boot', help='mantem DTR ativo durante o reset para entrar no bootloader',
                                  action='store_true')
-    cli_adicionar_comando_linha_serial(subparsers, Comandos.DTR1.value, 'dtr', False)
-    cli_adicionar_comando_linha_serial(subparsers, Comandos.DTR0.value, 'dtr', True)
-    cli_adicionar_comando_linha_serial(subparsers, Comandos.RTS1.value, 'rts', False)
-    cli_adicionar_comando_linha_serial(subparsers, Comandos.RTS0.value, 'rts', True)
+    cli_adicionar_comando_linha_serial(subparsers, Comandos.DTR1.value, 'dtr', True)
+    cli_adicionar_comando_linha_serial(subparsers, Comandos.DTR0.value, 'dtr', False)
+    cli_adicionar_comando_linha_serial(subparsers, Comandos.RTS1.value, 'rts', True)
+    cli_adicionar_comando_linha_serial(subparsers, Comandos.RTS0.value, 'rts', False)
 
     parser_verify = subparsers.add_parser(Comandos.VERIFY.value, help='verificar o conteudo da flash')
     parser_verify.add_argument(Argumentos.ADDRESS.value, help='endereco da flash a ser verificado', type=arg_int)

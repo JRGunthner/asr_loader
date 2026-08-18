@@ -1,3 +1,9 @@
+## v1.4 - unreleased
+- `hw_reset` agora força estado inicial conhecido (`DTR=0`, `RTS=0`) antes de pulsar reset, reduzindo falhas por estado indefinido das linhas ao abrir a porta serial.
+- Correção do mapeamento dos comandos de bancada `dtr1/dtr0/rts1/rts0` para refletirem corretamente o estado solicitado no nome do comando.
+- Ajuste dos testes de protocolo para validar a sequência completa de `hw_reset` com e sem `--boot`.
+- Ajuste dos testes de parser da CLI para validar o estado correto de `dtr1` e `dtr0`.
+
 ## v1.3 - 2026-07-24
 - Adição do comando para gerar a versão de firmware OTA
 - Adicionado endereço da eeprom do ASR6601SE

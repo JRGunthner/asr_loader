@@ -148,6 +148,8 @@ class ASRLoader(object):
             self.config.boot_reset_delay,
             self.config.boot_release_delay,
         ))
+        self.set_dtr(False)
+        self.set_rts(False)
         if mode:
             self.set_dtr(True)
             self.set_rts(True)

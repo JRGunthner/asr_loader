@@ -378,9 +378,20 @@ class TestesDoProtocoloASRLoader(unittest.TestCase):
         with mock.patch('src.ASRLoader.time.sleep') as sleep_mock:
             loader.hw_reset(1)
 
-        self.assertEqual(fake.dtr_states, [True, False])
-        self.assertEqual(fake.rts_states, [True, False])
+        self.assertEqual(fake.dtr_states, [False, True, False])
+        self.assertEqual(fake.rts_states, [False, True, False])
         sleep_mock.assert_has_calls([mock.call(0.1), mock.call(0.2)])
+
+    def test_reset_de_hardware_normal_libera_boot_e_pulsa_rts(self):
+        fake = SerialSimulada()
+        loader, _config = criar_carregador(fake)
+
+        with mock.patch('src.ASRLoader.time.sleep') as sleep_mock:
+            loader.hw_reset(0)
+
+        self.assertEqual(fake.dtr_states, [False])
+        self.assertEqual(fake.rts_states, [False, True, False])
+        sleep_mock.assert_called_once_with(0.1)
 
     def test_conectar_sem_boot_automatico_apenas_sincroniza(self):
         packet = montar_pacote_de_resposta(status=0)

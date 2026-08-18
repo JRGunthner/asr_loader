@@ -2,7 +2,7 @@
 
 import sys
 
-VERSAO_GRAVADOR = "1.3"
+VERSAO_GRAVADOR = "1.4"
 
 from src.cli import main
 
