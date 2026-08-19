@@ -35,6 +35,10 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
   - [dtr1 / dtr0 / rts1 / rts0](#dtr1--dtr0--rts1--rts0)
   - [clear_eeprom](#clear_eeprom)
   - [identificar_mcu](#identificar_mcu)
+  - [mapa_flash](#mapa_flash)
+  - [mapa_sram](#mapa_sram)
+  - [mapa_eeprom](#mapa_eeprom)
+  - [mapa_memoria](#mapa_memoria)
   - [serial](#serial)
   - [comdiag](#comdiag)
   - [doctor](#doctor)
@@ -1365,6 +1369,39 @@ dados dela precisarem ser preservados.
 ```powershell
 python asr_loader.py -p COM9 identificar_mcu
 ```
+
+### mapa_flash
+Lê todos os bytes da flash interna do MCU detectado, imprime o hexdump e gera
+automaticamente `mapas_memoria\mapa_flash.bin`. Um nome de arquivo opcional substitui o padrão.
+
+```powershell
+python asr_loader.py -p COM9 mapa_flash
+```
+
+### mapa_sram
+Lê todos os bytes da SRAM do MCU detectado e gera `mapas_memoria\mapa_sram.bin`.
+
+```powershell
+python asr_loader.py -p COM9 mapa_sram
+```
+
+### mapa_eeprom
+Lê todos os 4 KiB da EEPROM emulada do MCU detectado e gera `mapas_memoria\mapa_eeprom.bin`.
+
+```powershell
+python asr_loader.py -p COM9 mapa_eeprom
+```
+
+### mapa_memoria
+Mostra, de uma vez, as faixas de flash interna, SRAM e EEPROM emulada.
+
+```powershell
+python asr_loader.py -p COM9 mapa_memoria
+```
+
+Sem `--mcu`, os comandos usam a mesma identificacao validada pelo `flash`; por
+isso apagam a EEPROM emulada durante a identificacao. Para preservar a EEPROM,
+informe o modelo conhecido: `mapa_eeprom eeprom.bin --mcu cb`.
 - para regiões muito grandes, prefira informar um arquivo de saída e analisar o dump depois.
 
 ---

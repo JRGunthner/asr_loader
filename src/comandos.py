@@ -162,6 +162,67 @@ def asr_identificar_mcu(param, processador, config):
     return variante
 
 
+def asr_obter_mapa_memoria(variante):
+    if variante == 'ASR6601CB':
+        flash_size = 128 * 1024
+        sram_size = 16 * 1024
+        eeprom_address = EEPROM_ENDERECO_ASR6601CB
+    elif variante == 'ASR6601SE':
+        flash_size = 256 * 1024
+        sram_size = 64 * 1024
+        eeprom_address = EEPROM_ENDERECO_ASR6601SE
+    else:
+        raise Exception('ERROR: variante de MCU desconhecida: %s' % variante)
+
+    return (
+        ('Flash interna', ASR_APP_FLASH_START, ASR_APP_FLASH_START + flash_size, flash_size),
+        ('SRAM', ARM_SRAM_START, ARM_SRAM_START + sram_size, sram_size),
+        ('EEPROM emulada', eeprom_address, eeprom_address + EEPROM_SIZE, EEPROM_SIZE),
+    )
+
+
+def asr_mapa_memoria(param, processador, config, espaco=None, ler_bytes=False):
+    """Mostra ou le um espaco de memoria para o MCU conectado."""
+    mcu_informado = getattr(param, 'mcu', None)
+    if mcu_informado:
+        variantes = {'cb': 'ASR6601CB', 'se': 'ASR6601SE'}
+        variante = variantes[mcu_informado]
+        if not asr_conectar(processador, config.portas_disponiveis, param.baud):
+            return b'' if ler_bytes else ()
+        print('MCU selecionado: %s' % variante)
+    else:
+        variante = asr_identificar_mcu(param, processador, config)
+    if variante is None:
+        return b'' if ler_bytes else ()
+
+    mapa = asr_obter_mapa_memoria(variante)
+    if espaco is not None:
+        mapa = tuple(regiao for regiao in mapa if regiao[0] == espaco)
+
+    for nome, inicio, fim, tamanho in mapa:
+        print('%s: 0x%08X - 0x%08X (%d KiB)' % (
+            nome,
+            inicio,
+            fim - 1,
+            tamanho // 1024,
+        ))
+
+    if ler_bytes:
+        if len(mapa) != 1:
+            raise Exception('ERROR: leitura de bytes requer um espaco de memoria especifico')
+        nome, inicio, _fim, tamanho = mapa[0]
+        nomes_dump = {
+            'Flash interna': 'mapa_flash.bin',
+            'SRAM': 'mapa_sram.bin',
+            'EEPROM emulada': 'mapa_eeprom.bin',
+        }
+        output = getattr(param, 'output', None) or str(
+            pathlib.Path('mapas_memoria') / nomes_dump[nome]
+        )
+        return _asr_ler_mem(processador, inicio, tamanho, output)
+    return mapa
+
+
 def asr_clean_eeprom(param, processador, config):
     if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return
@@ -495,29 +556,53 @@ def asr_ler_mem(param, processador, config):
     if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return b''
 
-    endereco_inicial = param.address
+    return _asr_ler_mem(processador, param.address, param.size, getattr(param, 'output', None))
+
+
+def _asr_ler_mem(processador, endereco_inicial, tamanho, output=None):
     endereco_alinhado = endereco_inicial & ~0x3
     deslocamento_inicial = endereco_inicial - endereco_alinhado
-    tamanho_total = deslocamento_inicial + param.size
+    tamanho_total = deslocamento_inicial + tamanho
     quantidade_palavras = (tamanho_total + 3) // 4
 
-    dados_lidos = bytearray()
-    for indice in range(quantidade_palavras):
-        endereco_atual = endereco_alinhado + (indice * 4)
-        valor = processador.ler_reg(endereco_atual)[0]
-        dados_lidos.extend(struct.pack('<I', valor))
+    dados = bytearray()
+    linha = bytearray()
 
-    dados = bytes(dados_lidos[deslocamento_inicial:deslocamento_inicial + param.size])
+    print('Lendo memoria: %d bytes a partir de %s' % (tamanho, hex(endereco_inicial)))
+    if output:
+        pathlib.Path(output).parent.mkdir(parents=True, exist_ok=True)
+    with (open(output, 'wb') if output else contextlib.nullcontext()) as arquivo:
+        for indice in range(quantidade_palavras):
+            endereco_atual = endereco_alinhado + (indice * 4)
+            palavra = struct.pack('<I', processador.ler_reg(endereco_atual)[0])
+            inicio_palavra = indice * 4
+            inicio = max(deslocamento_inicial, inicio_palavra)
+            fim = min(deslocamento_inicial + tamanho, inicio_palavra + len(palavra))
+            if inicio >= fim:
+                continue
 
-    print('Leitura de memoria concluida: %d bytes a partir de %s' % (param.size, hex(endereco_inicial)))
-    print(asr_formatar_hexdump(endereco_inicial, dados))
+            trecho = palavra[inicio - inicio_palavra:fim - inicio_palavra]
+            dados.extend(trecho)
+            if arquivo:
+                arquivo.write(trecho)
 
-    if getattr(param, 'output', None):
-        with open(param.output, 'wb') as arquivo:
-            arquivo.write(dados)
-        print('Dump salvo em: %s' % param.output)
+            while trecho:
+                quantidade = min(16 - len(linha), len(trecho))
+                linha.extend(trecho[:quantidade])
+                trecho = trecho[quantidade:]
+                if len(linha) == 16:
+                    endereco_linha = endereco_inicial + len(dados) - len(trecho) - len(linha)
+                    print(asr_formatar_hexdump(endereco_linha, bytes(linha)), flush=True)
+                    linha.clear()
 
-    return dados
+        if linha:
+            print(asr_formatar_hexdump(endereco_inicial + len(dados) - len(linha), bytes(linha)), flush=True)
+
+    print('Leitura de memoria concluida: %d bytes a partir de %s' % (tamanho, hex(endereco_inicial)))
+    if output:
+        print('Dump salvo em: %s' % output)
+
+    return bytes(dados)
 
 
 def asr_snapshot(param, processador, config):

@@ -2,6 +2,7 @@
 /build
 /dist
 /teste-build
+/mapas_memoria/
 __pycache__/
 *.py[cod]
 *.spec

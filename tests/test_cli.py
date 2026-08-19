@@ -23,6 +23,12 @@ class TestesDoAnalisadorCli(unittest.TestCase):
         argumentos = self.analisador.parse_args(['identificar_mcu'])
         self.assertEqual(argumentos.command, 'identificar_mcu')
 
+    def test_comandos_de_mapa_de_memoria_estao_registrados(self):
+        for comando in ('mapa_flash', 'mapa_sram', 'mapa_eeprom', 'mapa_memoria'):
+            with self.subTest(comando=comando):
+                argumentos = self.analisador.parse_args([comando])
+                self.assertEqual(argumentos.command, comando)
+
     def test_comando_de_linha_de_controle_aceita_tempo_de_retencao(self):
         argumentos = self.analisador.parse_args(['dtr1', '--hold', '0.5'])
         self.assertEqual(argumentos.command, 'dtr1')

@@ -24,6 +24,10 @@ class Comandos(str, Enum):
     HW_RESET = 'hw_reset'
     CLEAR_EEPROM = 'clear_eeprom'
     IDENTIFICAR_MCU = 'identificar_mcu'
+    MAPA_FLASH = 'mapa_flash'
+    MAPA_SRAM = 'mapa_sram'
+    MAPA_EEPROM = 'mapa_eeprom'
+    MAPA_MEMORIA = 'mapa_memoria'
     SERIAL = 'serial'
 
     DTR1 = 'dtr1'
@@ -340,6 +344,18 @@ def cli_build_parser():
     subparsers.add_parser(Comandos.SERIAL.value, help='ler o serial do ASR')
     subparsers.add_parser(Comandos.IDENTIFICAR_MCU.value,
                           help='identificar ASR6601CB ou ASR6601SE pelo teste de EEPROM do flash')
+    for comando, texto in (
+            (Comandos.MAPA_FLASH.value, 'ler o mapa e os bytes da flash interna do MCU conectado'),
+            (Comandos.MAPA_SRAM.value, 'ler o mapa e os bytes da SRAM do MCU conectado'),
+            (Comandos.MAPA_EEPROM.value, 'ler o mapa e os bytes da EEPROM emulada do MCU conectado')):
+        parser_mapa = subparsers.add_parser(comando, help=texto)
+        parser_mapa.add_argument(Argumentos.OUTPUT.value, nargs='?', help='arquivo binario opcional para salvar o dump')
+        parser_mapa.add_argument('--mcu', choices=('cb', 'se'),
+                                 help='modelo conhecido; evita a identificacao por apagamento da EEPROM')
+    parser_mapa_memoria = subparsers.add_parser(Comandos.MAPA_MEMORIA.value,
+                                                 help='mostrar o mapa completo de memoria do MCU conectado')
+    parser_mapa_memoria.add_argument('--mcu', choices=('cb', 'se'),
+                                      help='modelo conhecido; evita a identificacao por apagamento da EEPROM')
     parser_comdiag = subparsers.add_parser(Comandos.COMDIAG.value,
                                            help='mostra diagnostico do ambiente e portas seriais')
     parser_comdiag.add_argument('--json', dest=Argumentos.JSON.value, action='store_true',
@@ -634,6 +650,14 @@ def main(argv=None):
             print('Serial: %s' % sn.hex())
         elif args.command == Comandos.IDENTIFICAR_MCU.value:
             asr_identificar_mcu(args, asr_mcu, config)
+        elif args.command == Comandos.MAPA_FLASH.value:
+            asr_mapa_memoria(args, asr_mcu, config, 'Flash interna', ler_bytes=True)
+        elif args.command == Comandos.MAPA_SRAM.value:
+            asr_mapa_memoria(args, asr_mcu, config, 'SRAM', ler_bytes=True)
+        elif args.command == Comandos.MAPA_EEPROM.value:
+            asr_mapa_memoria(args, asr_mcu, config, 'EEPROM emulada', ler_bytes=True)
+        elif args.command == Comandos.MAPA_MEMORIA.value:
+            asr_mapa_memoria(args, asr_mcu, config)
         elif args.command == Comandos.ESCREVER_REG.value:
             asr_escrever_reg(args, asr_mcu, config)
             print('Registrador escrito com sucesso')

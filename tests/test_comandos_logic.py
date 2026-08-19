@@ -1,5 +1,6 @@
 import contextlib
 import io
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -16,6 +17,7 @@ from src.comandos import (
     asr_hw_reset,
     asr_identificar_mcu,
     asr_ler_mem,
+    asr_mapa_memoria,
 )
 from src.constantes import EEPROM_ENDERECO_ASR6601CB, EEPROM_ENDERECO_ASR6601SE, EEPROM_SIZE
 from src.exceptions import CmdExcessao
@@ -175,6 +177,21 @@ class TestesDaLogicaDosComandos(unittest.TestCase):
 
         self.assertEqual(dados, b'\x01\x02\x03\x04')
 
+    def test_ler_mem_imprime_hexdump_progressivamente_por_linha(self):
+        processador = ProcessadorSimulado(valores_de_registradores={
+            endereco: 0x04030201 for endereco in range(0x20000000, 0x20000014, 4)
+        })
+        configuracao = SimpleNamespace(portas_disponiveis=['COM1'])
+        parametros = SimpleNamespace(address=0x20000000, size=20, baud=921600, output=None)
+        saida_padrao = io.StringIO()
+
+        with contextlib.redirect_stdout(saida_padrao):
+            asr_ler_mem(parametros, processador, configuracao)
+
+        linhas = saida_padrao.getvalue().splitlines()
+        self.assertIn('20000000', linhas[2])
+        self.assertIn('20000010', linhas[3])
+
     def test_ler_mem_rejeita_tamanho_nao_positivo_antes_de_conectar(self):
         processador = ProcessadorSimulado()
         configuracao = SimpleNamespace(portas_disponiveis=['COM1'])
@@ -249,6 +266,63 @@ class TestesDaLogicaDosComandos(unittest.TestCase):
             (EEPROM_ENDERECO_ASR6601CB, EEPROM_SIZE),
             (EEPROM_ENDERECO_ASR6601SE, EEPROM_SIZE),
         ])
+
+    def test_mapa_memoria_mostra_faixas_do_cb(self):
+        processador = ProcessadorSimulado(
+            enderecos_com_falha_de_apagamento={EEPROM_ENDERECO_ASR6601SE}
+        )
+        configuracao = SimpleNamespace(portas_disponiveis=['COM1'])
+        parametros = SimpleNamespace(baud=921600)
+
+        saida_padrao = io.StringIO()
+        with contextlib.redirect_stdout(saida_padrao):
+            mapa = asr_mapa_memoria(parametros, processador, configuracao)
+
+        self.assertEqual(mapa, (
+            ('Flash interna', 0x08000000, 0x08020000, 128 * 1024),
+            ('SRAM', 0x20000000, 0x20004000, 16 * 1024),
+            ('EEPROM emulada', EEPROM_ENDERECO_ASR6601CB,
+             EEPROM_ENDERECO_ASR6601CB + EEPROM_SIZE, EEPROM_SIZE),
+        ))
+        self.assertIn('Flash interna: 0x08000000 - 0x0801FFFF (128 KiB)', saida_padrao.getvalue())
+        self.assertIn('SRAM: 0x20000000 - 0x20003FFF (16 KiB)', saida_padrao.getvalue())
+        self.assertIn('EEPROM emulada: 0x0801F000 - 0x0801FFFF (4 KiB)', saida_padrao.getvalue())
+
+    def test_mapa_sram_mostra_apenas_faixa_do_se(self):
+        processador = ProcessadorSimulado()
+        configuracao = SimpleNamespace(portas_disponiveis=['COM1'])
+        parametros = SimpleNamespace(baud=921600)
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            mapa = asr_mapa_memoria(parametros, processador, configuracao, 'SRAM')
+
+        self.assertEqual(mapa, (('SRAM', 0x20000000, 0x20010000, 64 * 1024),))
+
+    def test_mapa_eeprom_le_bytes_sem_apagar_quando_mcu_e_informado(self):
+        enderecos = range(EEPROM_ENDERECO_ASR6601CB, EEPROM_ENDERECO_ASR6601CB + EEPROM_SIZE, 4)
+        processador = ProcessadorSimulado(
+            valores_de_registradores={endereco: 0x04030201 for endereco in enderecos}
+        )
+        configuracao = SimpleNamespace(portas_disponiveis=['COM1'])
+
+        with tempfile.TemporaryDirectory() as diretorio_temporario:
+            diretorio_original = os.getcwd()
+            try:
+                os.chdir(diretorio_temporario)
+                parametros = SimpleNamespace(baud=921600, mcu='cb', output=None)
+                with contextlib.redirect_stdout(io.StringIO()):
+                    dados = asr_mapa_memoria(
+                        parametros, processador, configuracao, 'EEPROM emulada', ler_bytes=True
+                    )
+
+                arquivo = Path('mapas_memoria') / 'mapa_eeprom.bin'
+                self.assertTrue(arquivo.parent.is_dir())
+                self.assertEqual(arquivo.read_bytes(), dados)
+            finally:
+                os.chdir(diretorio_original)
+
+        self.assertEqual(dados, b'\x01\x02\x03\x04' * (EEPROM_SIZE // 4))
+        self.assertEqual(processador.chamadas_de_apagamento, [])
 
     def test_controlar_linha_serial_define_dtr_e_fecha_porta(self):
         processador = ProcessadorSimulado()
