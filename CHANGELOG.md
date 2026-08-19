@@ -1,3 +1,6 @@
+## v1.5 - unreleased
+- Adicao do comando `identificar_mcu`, que reutiliza a verificacao de mapeamento de EEPROM ja usada no `flash` para diferenciar ASR6601CB e ASR6601SE.
+
 ## v1.4 - 2026-08-10
 - `hw_reset` agora força estado inicial conhecido (`DTR=0`, `RTS=0`) antes de pulsar reset, reduzindo falhas por estado indefinido das linhas ao abrir a porta serial.
 - Correção do mapeamento dos comandos de bancada `dtr1/dtr0/rts1/rts0` para refletirem corretamente o estado solicitado no nome do comando.

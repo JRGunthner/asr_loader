@@ -19,6 +19,10 @@ class TestesDoAnalisadorCli(unittest.TestCase):
         argumentos = self.analisador.parse_args(['clear_eeprom'])
         self.assertEqual(argumentos.command, 'clear_eeprom')
 
+    def test_comando_identificar_mcu_esta_registrado(self):
+        argumentos = self.analisador.parse_args(['identificar_mcu'])
+        self.assertEqual(argumentos.command, 'identificar_mcu')
+
     def test_comando_de_linha_de_controle_aceita_tempo_de_retencao(self):
         argumentos = self.analisador.parse_args(['dtr1', '--hold', '0.5'])
         self.assertEqual(argumentos.command, 'dtr1')

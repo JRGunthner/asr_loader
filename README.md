@@ -34,6 +34,7 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
   - [hw_reset](#hw_reset)
   - [dtr1 / dtr0 / rts1 / rts0](#dtr1--dtr0--rts1--rts0)
   - [clear_eeprom](#clear_eeprom)
+  - [identificar_mcu](#identificar_mcu)
   - [serial](#serial)
   - [comdiag](#comdiag)
   - [doctor](#doctor)
@@ -1354,6 +1355,16 @@ O comando:
 
 - a leitura usa o mesmo mecanismo interno de `ler_reg`, repetindo acessos de 32 bits;
 - alguns endereços podem não ser legíveis pelo bootloader e podem retornar erro;
+
+### identificar_mcu
+Identifica se o dispositivo conectado e um `ASR6601CB` (128 KiB) ou um
+`ASR6601SE` (256 KiB), usando exatamente o teste de mapeamento ja validado
+no comando `flash`. Esse teste apaga a EEPROM emulada; nao o execute se os
+dados dela precisarem ser preservados.
+
+```powershell
+python asr_loader.py -p COM9 identificar_mcu
+```
 - para regiões muito grandes, prefira informar um arquivo de saída e analisar o dump depois.
 
 ---

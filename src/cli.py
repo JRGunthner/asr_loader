@@ -23,6 +23,7 @@ class Comandos(str, Enum):
     RESET = 'reset'
     HW_RESET = 'hw_reset'
     CLEAR_EEPROM = 'clear_eeprom'
+    IDENTIFICAR_MCU = 'identificar_mcu'
     SERIAL = 'serial'
 
     DTR1 = 'dtr1'
@@ -337,6 +338,8 @@ def cli_build_parser():
 
     subparsers.add_parser(Comandos.LER_OPT1.value, help='ler a area opt1 da flash')
     subparsers.add_parser(Comandos.SERIAL.value, help='ler o serial do ASR')
+    subparsers.add_parser(Comandos.IDENTIFICAR_MCU.value,
+                          help='identificar ASR6601CB ou ASR6601SE pelo teste de EEPROM do flash')
     parser_comdiag = subparsers.add_parser(Comandos.COMDIAG.value,
                                            help='mostra diagnostico do ambiente e portas seriais')
     parser_comdiag.add_argument('--json', dest=Argumentos.JSON.value, action='store_true',
@@ -629,6 +632,8 @@ def main(argv=None):
         elif args.command == Comandos.SERIAL.value:
             sn = asr_serial_asr(args, asr_mcu, config)
             print('Serial: %s' % sn.hex())
+        elif args.command == Comandos.IDENTIFICAR_MCU.value:
+            asr_identificar_mcu(args, asr_mcu, config)
         elif args.command == Comandos.ESCREVER_REG.value:
             asr_escrever_reg(args, asr_mcu, config)
             print('Registrador escrito com sucesso')

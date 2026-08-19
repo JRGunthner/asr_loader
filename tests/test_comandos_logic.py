@@ -14,6 +14,7 @@ from src.comandos import (
     asr_fechar_porta,
     asr_formatar_hexdump,
     asr_hw_reset,
+    asr_identificar_mcu,
     asr_ler_mem,
 )
 from src.constantes import EEPROM_ENDERECO_ASR6601CB, EEPROM_ENDERECO_ASR6601SE, EEPROM_SIZE
@@ -37,6 +38,7 @@ class ProcessadorSimulado:
         portas_com_falha_de_conexao=None,
         enderecos_com_falha_de_apagamento=None,
         valores_de_registradores=None,
+        enderecos_com_falha_de_leitura=None,
     ):
         self.ser = None
         self.porta_atual = None
@@ -53,6 +55,7 @@ class ProcessadorSimulado:
             enderecos_com_falha_de_apagamento or []
         )
         self.valores_de_registradores = dict(valores_de_registradores or {})
+        self.enderecos_com_falha_de_leitura = set(enderecos_com_falha_de_leitura or [])
 
     def set_port(self, port, baud=None):
         self.porta_atual = port
@@ -73,6 +76,8 @@ class ProcessadorSimulado:
             raise Exception('erase failed')
 
     def ler_reg(self, address):
+        if address in self.enderecos_com_falha_de_leitura:
+            raise CmdExcessao('read failed')
         self.leituras_de_registradores.append(address)
         return (self.valores_de_registradores[address],)
 
@@ -206,6 +211,44 @@ class TestesDaLogicaDosComandos(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             with self.assertRaisesRegex(Exception, 'todos os mapeamentos'):
                 asr_apagar_eeprom(processador)
+
+    def test_identificar_mcu_reutiliza_teste_de_eeprom_do_flash_para_se(self):
+        processador = ProcessadorSimulado()
+        configuracao = SimpleNamespace(portas_disponiveis=['COM1'])
+        parametros = SimpleNamespace(baud=921600)
+
+        saida_padrao = io.StringIO()
+        with contextlib.redirect_stdout(saida_padrao):
+            variante = asr_identificar_mcu(parametros, processador, configuracao)
+
+        self.assertEqual(variante, 'ASR6601SE')
+        self.assertIn('MCU identificado: ASR6601SE', saida_padrao.getvalue())
+        self.assertNotIn('Aviso:', saida_padrao.getvalue())
+        self.assertNotIn('Dispositivo identificado:', saida_padrao.getvalue())
+        self.assertEqual(processador.chamadas_de_apagamento, [
+            (EEPROM_ENDERECO_ASR6601CB, EEPROM_SIZE),
+            (EEPROM_ENDERECO_ASR6601SE, EEPROM_SIZE),
+        ])
+
+    def test_identificar_mcu_reutiliza_teste_de_eeprom_do_flash_para_cb(self):
+        processador = ProcessadorSimulado(
+            enderecos_com_falha_de_apagamento={EEPROM_ENDERECO_ASR6601SE}
+        )
+        configuracao = SimpleNamespace(portas_disponiveis=['COM1'])
+        parametros = SimpleNamespace(baud=921600)
+
+        saida_padrao = io.StringIO()
+        with contextlib.redirect_stdout(saida_padrao):
+            variante = asr_identificar_mcu(parametros, processador, configuracao)
+
+        self.assertEqual(variante, 'ASR6601CB')
+        self.assertIn('MCU identificado: ASR6601CB', saida_padrao.getvalue())
+        self.assertNotIn('Aviso:', saida_padrao.getvalue())
+        self.assertNotIn('Dispositivo identificado:', saida_padrao.getvalue())
+        self.assertEqual(processador.chamadas_de_apagamento, [
+            (EEPROM_ENDERECO_ASR6601CB, EEPROM_SIZE),
+            (EEPROM_ENDERECO_ASR6601SE, EEPROM_SIZE),
+        ])
 
     def test_controlar_linha_serial_define_dtr_e_fecha_porta(self):
         processador = ProcessadorSimulado()

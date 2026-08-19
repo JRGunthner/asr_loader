@@ -114,7 +114,7 @@ def asr_erase(param, processador, config):
     processador.sw_reset(0)
 
 
-def asr_apagar_eeprom(processador, mostrar_erros=True):
+def asr_apagar_eeprom(processador, mostrar_erros=True, mostrar_identificacao=True):
     enderecos_eeprom = (
         ("ASR6601CB", EEPROM_ENDERECO_ASR6601CB),
         ("ASR6601SE", EEPROM_ENDERECO_ASR6601SE),
@@ -135,9 +135,31 @@ def asr_apagar_eeprom(processador, mostrar_erros=True):
         raise Exception('ERROR: falha ao apagar EEPROM em todos os mapeamentos testados')
 
     if len(variantes_detectadas) == 1:
-        print('Dispositivo identificado: %s' % variantes_detectadas[0])
+        variante_detectada = variantes_detectadas[0]
     elif len(variantes_detectadas) > 1:
-        print('Dispositivo identificado: %s' % variantes_detectadas[1])
+        variante_detectada = variantes_detectadas[1]
+    else:
+        raise Exception('ERROR: nenhum mapeamento de EEPROM foi identificado')
+
+    if mostrar_identificacao:
+        print('Dispositivo identificado: %s' % variante_detectada)
+    return variante_detectada
+
+
+def asr_identificar_mcu(param, processador, config):
+    """Identifica o MCU pelo mesmo teste de mapeamento usado no flash."""
+    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
+        return None
+
+    variante = asr_apagar_eeprom(
+        processador,
+        mostrar_erros=False,
+        mostrar_identificacao=False,
+    )
+    flash_size = 128 * 1024 if variante == 'ASR6601CB' else 256 * 1024
+
+    print('MCU identificado: %s (%d KiB de flash)' % (variante, flash_size // 1024))
+    return variante
 
 
 def asr_clean_eeprom(param, processador, config):
