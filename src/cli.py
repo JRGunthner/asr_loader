@@ -204,6 +204,7 @@ def cli_adicionar_argumentos(argumentos):
     argumentos.add_argument(Opcoes.TIMEOUT.long, Opcoes.TIMEOUT.short, help=Opcoes.TIMEOUT.texto, type=int,
                             default=TIMEOUT_DEFAULT)
     argumentos.add_argument(Opcoes.EEPROM.long, Opcoes.EEPROM.short, help=Opcoes.EEPROM.texto, action='store_true')
+    argumentos.add_argument('--v8', help='usar o mapeamento de EEPROM de 1 KiB do firmware v8', action='store_true')
     argumentos.add_argument('--no-auto-boot', help='nao aciona DTR/RTS automaticamente antes de conectar',
                             action='store_true')
     argumentos.add_argument('--boot-reset-delay', help='tempo em segundos mantendo o reset ativo via RTS, default 0.1s',
@@ -496,6 +497,11 @@ def cli_build_parser():
     subparsers.add_parser(Comandos.HELP.value, help='mostra essa mensagem de ajuda e sai')
     subparsers.add_parser(Comandos.VERSAO.value, help='mostra a versao do ASR Loader')
 
+    for subparser in subparsers.choices.values():
+        subparser.add_argument('--v8',
+                               help='usar o mapeamento de EEPROM de 1 KiB do firmware v8',
+                               action='store_true', default=argparse.SUPPRESS)
+
     return parser
 
 
@@ -567,6 +573,7 @@ def main(argv=None):
             boot_release_delay=args.boot_release_delay,
             log_file=args.log_file,
             trace_json=args.trace_json,
+            v8=args.v8,
         )
         config.log('command=%s argv=%s baud=%d timeout=%s portas=%s' % (
             args.command,

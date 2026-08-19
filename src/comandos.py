@@ -14,7 +14,10 @@ from .constantes import (
     ARM_SRAM_START,
     EEPROM_ENDERECO_ASR6601CB,
     EEPROM_ENDERECO_ASR6601SE,
+    EEPROM_ENDERECO_V8_ASR6601CB,
+    EEPROM_ENDERECO_V8_ASR6601SE,
     EEPROM_SIZE,
+    EEPROM_SIZE_V8,
     OTA_MAGIC,
 )
 from .diagnosticos import (
@@ -114,17 +117,25 @@ def asr_erase(param, processador, config):
     processador.sw_reset(0)
 
 
-def asr_apagar_eeprom(processador, mostrar_erros=True, mostrar_identificacao=True):
-    enderecos_eeprom = (
-        ("ASR6601CB", EEPROM_ENDERECO_ASR6601CB),
-        ("ASR6601SE", EEPROM_ENDERECO_ASR6601SE),
-    )
+def asr_apagar_eeprom(processador, mostrar_erros=True, mostrar_identificacao=True, v8=False):
+    if v8:
+        enderecos_eeprom = (
+            ("ASR6601CB", EEPROM_ENDERECO_V8_ASR6601CB),
+            ("ASR6601SE", EEPROM_ENDERECO_V8_ASR6601SE),
+        )
+        tamanho_eeprom = EEPROM_SIZE_V8
+    else:
+        enderecos_eeprom = (
+            ("ASR6601CB", EEPROM_ENDERECO_ASR6601CB),
+            ("ASR6601SE", EEPROM_ENDERECO_ASR6601SE),
+        )
+        tamanho_eeprom = EEPROM_SIZE
     variantes_detectadas = []
     falhas = []
 
     for variante, endereco in enderecos_eeprom:
         try:
-            processador.erase(endereco, EEPROM_SIZE)
+            processador.erase(endereco, tamanho_eeprom)
             variantes_detectadas.append(variante)
         except Exception as excessao:
             if mostrar_erros:
@@ -155,6 +166,7 @@ def asr_identificar_mcu(param, processador, config):
         processador,
         mostrar_erros=False,
         mostrar_identificacao=False,
+        v8=getattr(config, 'v8', False),
     )
     flash_size = 128 * 1024 if variante == 'ASR6601CB' else 256 * 1024
 
@@ -162,7 +174,7 @@ def asr_identificar_mcu(param, processador, config):
     return variante
 
 
-def asr_obter_mapa_memoria(variante):
+def asr_obter_mapa_memoria(variante, v8=False):
     if variante == 'ASR6601CB':
         flash_size = 128 * 1024
         sram_size = 16 * 1024
@@ -174,10 +186,17 @@ def asr_obter_mapa_memoria(variante):
     else:
         raise Exception('ERROR: variante de MCU desconhecida: %s' % variante)
 
+    if v8:
+        eeprom_address = (EEPROM_ENDERECO_V8_ASR6601CB if variante == 'ASR6601CB'
+                           else EEPROM_ENDERECO_V8_ASR6601SE)
+        eeprom_size = EEPROM_SIZE_V8
+    else:
+        eeprom_size = EEPROM_SIZE
+
     return (
         ('Flash interna', ASR_APP_FLASH_START, ASR_APP_FLASH_START + flash_size, flash_size),
         ('SRAM', ARM_SRAM_START, ARM_SRAM_START + sram_size, sram_size),
-        ('EEPROM emulada', eeprom_address, eeprom_address + EEPROM_SIZE, EEPROM_SIZE),
+        ('EEPROM emulada', eeprom_address, eeprom_address + eeprom_size, eeprom_size),
     )
 
 
@@ -195,7 +214,7 @@ def asr_mapa_memoria(param, processador, config, espaco=None, ler_bytes=False):
     if variante is None:
         return b'' if ler_bytes else ()
 
-    mapa = asr_obter_mapa_memoria(variante)
+    mapa = asr_obter_mapa_memoria(variante, v8=getattr(config, 'v8', False))
     if espaco is not None:
         mapa = tuple(regiao for regiao in mapa if regiao[0] == espaco)
 
@@ -226,7 +245,7 @@ def asr_mapa_memoria(param, processador, config, espaco=None, ler_bytes=False):
 def asr_clean_eeprom(param, processador, config):
     if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return
-    asr_apagar_eeprom(processador)
+    asr_apagar_eeprom(processador, v8=getattr(config, 'v8', False))
     processador.sw_reset(0)
 
 
@@ -250,7 +269,7 @@ def asr_flash(param, processador, config):
         return False
 
     if config.apaga_eeprom:
-        asr_apagar_eeprom(processador, mostrar_erros=False)
+        asr_apagar_eeprom(processador, mostrar_erros=False, v8=getattr(config, 'v8', False))
 
     for endereco, pacote in arquivos:
         pacote_len = os.path.getsize(pacote)

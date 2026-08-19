@@ -59,6 +59,14 @@ class TestesDoAnalisadorCli(unittest.TestCase):
         self.assertEqual(argumentos.boot_release_delay, 0.5)
         self.assertEqual(argumentos.log_file, 'debug.log')
 
+    def test_opcao_v8_esta_disponivel(self):
+        argumentos = self.analisador.parse_args(['--v8', 'mapa_eeprom'])
+        self.assertTrue(argumentos.v8)
+
+    def test_opcao_v8_e_aceita_apos_o_subcomando(self):
+        argumentos = self.analisador.parse_args(['mapa_eeprom', '--mcu', 'cb', '--v8'])
+        self.assertTrue(argumentos.v8)
+
     def test_alias_dts_nao_esta_registrado(self):
         with contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit):

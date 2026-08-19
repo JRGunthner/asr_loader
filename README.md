@@ -22,6 +22,7 @@ Ferramenta para gravação e debug de microcontroladores ASR via porta serial.
   - [Boot automático via DTR/RTS: --no-auto-boot](#boot-automático-via-dtrrts---no-auto-boot)
   - [Tempos do boot automático: --boot-reset-delay e --boot-release-delay](#tempos-do-boot-automático---boot-reset-delay-e---boot-release-delay)
   - [Manter EEPROM: -e ou --eeprom](#manter-eeprom--e-ou---eeprom)
+  - [Firmware v8: --v8](#firmware-v8---v8)
   - [Help: -h ou --help](#help--h-ou---help)
 - [Comandos](#comandos)
   - [make](#make)
@@ -1390,6 +1391,16 @@ Lê todos os 4 KiB da EEPROM emulada do MCU detectado e gera `mapas_memoria\mapa
 
 ```powershell
 python asr_loader.py -p COM9 mapa_eeprom
+```
+
+### Firmware v8: --v8
+Usa o mapeamento do firmware v8: somente o ultimo KiB da area de EEPROM
+reservada. Assim, a EEPROM passa a ser `0x0801FC00–0x0801FFFF` no CB e
+`0x0803FC00–0x0803FFFF` no SE. A opcao afeta apagamento, identificacao e os
+comandos de mapa.
+
+```powershell
+python asr_loader.py --v8 -p COM9 mapa_eeprom --mcu cb
 ```
 
 ### mapa_memoria

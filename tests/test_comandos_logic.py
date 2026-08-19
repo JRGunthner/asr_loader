@@ -19,7 +19,14 @@ from src.comandos import (
     asr_ler_mem,
     asr_mapa_memoria,
 )
-from src.constantes import EEPROM_ENDERECO_ASR6601CB, EEPROM_ENDERECO_ASR6601SE, EEPROM_SIZE
+from src.constantes import (
+    EEPROM_ENDERECO_ASR6601CB,
+    EEPROM_ENDERECO_ASR6601SE,
+    EEPROM_ENDERECO_V8_ASR6601CB,
+    EEPROM_ENDERECO_V8_ASR6601SE,
+    EEPROM_SIZE,
+    EEPROM_SIZE_V8,
+)
 from src.exceptions import CmdExcessao
 
 
@@ -229,6 +236,20 @@ class TestesDaLogicaDosComandos(unittest.TestCase):
             with self.assertRaisesRegex(Exception, 'todos os mapeamentos'):
                 asr_apagar_eeprom(processador)
 
+    def test_apagar_eeprom_v8_usa_ultimo_kib_da_regiao_reservada(self):
+        processador = ProcessadorSimulado(
+            enderecos_com_falha_de_apagamento={EEPROM_ENDERECO_V8_ASR6601SE}
+        )
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            variante = asr_apagar_eeprom(processador, v8=True)
+
+        self.assertEqual(variante, 'ASR6601CB')
+        self.assertEqual(processador.chamadas_de_apagamento, [
+            (EEPROM_ENDERECO_V8_ASR6601CB, EEPROM_SIZE_V8),
+            (EEPROM_ENDERECO_V8_ASR6601SE, EEPROM_SIZE_V8),
+        ])
+
     def test_identificar_mcu_reutiliza_teste_de_eeprom_do_flash_para_se(self):
         processador = ProcessadorSimulado()
         configuracao = SimpleNamespace(portas_disponiveis=['COM1'])
@@ -297,6 +318,21 @@ class TestesDaLogicaDosComandos(unittest.TestCase):
             mapa = asr_mapa_memoria(parametros, processador, configuracao, 'SRAM')
 
         self.assertEqual(mapa, (('SRAM', 0x20000000, 0x20010000, 64 * 1024),))
+
+    def test_mapa_eeprom_v8_mostra_apenas_ultimo_kib(self):
+        processador = ProcessadorSimulado(
+            enderecos_com_falha_de_apagamento={EEPROM_ENDERECO_V8_ASR6601SE}
+        )
+        configuracao = SimpleNamespace(portas_disponiveis=['COM1'], v8=True)
+        parametros = SimpleNamespace(baud=921600)
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            mapa = asr_mapa_memoria(parametros, processador, configuracao, 'EEPROM emulada')
+
+        self.assertEqual(mapa, ((
+            'EEPROM emulada', EEPROM_ENDERECO_V8_ASR6601CB,
+            EEPROM_ENDERECO_V8_ASR6601CB + EEPROM_SIZE_V8, EEPROM_SIZE_V8,
+        ),))
 
     def test_mapa_eeprom_le_bytes_sem_apagar_quando_mcu_e_informado(self):
         enderecos = range(EEPROM_ENDERECO_ASR6601CB, EEPROM_ENDERECO_ASR6601CB + EEPROM_SIZE, 4)

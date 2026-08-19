@@ -8,7 +8,8 @@ from .constantes import BAUD_DEFAULT, TIMEOUT_DEFAULT
 class RuntimeConfig(object):
     def __init__(self, verbose=False, com_timeout=TIMEOUT_DEFAULT, apaga_eeprom=True,
                  baud=BAUD_DEFAULT, portas_disponiveis=None, auto_boot=True,
-                 boot_reset_delay=0.1, boot_release_delay=0.1, log_file=None, trace_json=None):
+                 boot_reset_delay=0.1, boot_release_delay=0.1, log_file=None, trace_json=None,
+                 v8=False):
         self.verbose = verbose
         self.com_timeout = com_timeout
         self.apaga_eeprom = apaga_eeprom
@@ -19,6 +20,7 @@ class RuntimeConfig(object):
         self.boot_release_delay = boot_release_delay
         self.log_file = log_file
         self.trace_json = trace_json
+        self.v8 = v8
         self._log_handle = None
         self._trace_handle = None
         if log_file is not None:

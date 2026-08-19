@@ -2,6 +2,7 @@
 - Adicao do comando `identificar_mcu`, que reutiliza a verificacao de mapeamento de EEPROM ja usada no `flash` para diferenciar ASR6601CB e ASR6601SE.
 - Os comandos `mapa_flash`, `mapa_sram` e `mapa_eeprom` agora leem os bytes das respectivas regioes e geram automaticamente os dumps em `mapas_memoria`; `--mcu cb|se` evita apagar a EEPROM durante a identificacao.
 - Corrigido o tamanho da EEPROM emulada para 4 KiB, aplicando a faixa completa tanto no apagamento quanto no dump.
+- Adicionada a opcao global `--v8` para usar o ultimo KiB da EEPROM reservada no firmware v8 durante apagamentos, identificacao e mapas.
 
 ## v1.4 - 2026-08-10
 - `hw_reset` agora força estado inicial conhecido (`DTR=0`, `RTS=0`) antes de pulsar reset, reduzindo falhas por estado indefinido das linhas ao abrir a porta serial.
