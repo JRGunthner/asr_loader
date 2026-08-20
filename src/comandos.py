@@ -188,7 +188,7 @@ def asr_obter_mapa_memoria(variante, v8=False):
 
     if v8:
         eeprom_address = (EEPROM_ENDERECO_V8_ASR6601CB if variante == 'ASR6601CB'
-                           else EEPROM_ENDERECO_V8_ASR6601SE)
+                          else EEPROM_ENDERECO_V8_ASR6601SE)
         eeprom_size = EEPROM_SIZE_V8
     else:
         eeprom_size = EEPROM_SIZE
@@ -579,49 +579,52 @@ def asr_ler_mem(param, processador, config):
 
 
 def _asr_ler_mem(processador, endereco_inicial, tamanho, output=None):
-    endereco_alinhado = endereco_inicial & ~0x3
-    deslocamento_inicial = endereco_inicial - endereco_alinhado
-    tamanho_total = deslocamento_inicial + tamanho
-    quantidade_palavras = (tamanho_total + 3) // 4
+    try:
+        endereco_alinhado = endereco_inicial & ~0x3
+        deslocamento_inicial = endereco_inicial - endereco_alinhado
+        tamanho_total = deslocamento_inicial + tamanho
+        quantidade_palavras = (tamanho_total + 3) // 4
 
-    dados = bytearray()
-    linha = bytearray()
+        dados = bytearray()
+        linha = bytearray()
 
-    print('Lendo memoria: %d bytes a partir de %s' % (tamanho, hex(endereco_inicial)))
-    if output:
-        pathlib.Path(output).parent.mkdir(parents=True, exist_ok=True)
-    with (open(output, 'wb') if output else contextlib.nullcontext()) as arquivo:
-        for indice in range(quantidade_palavras):
-            endereco_atual = endereco_alinhado + (indice * 4)
-            palavra = struct.pack('<I', processador.ler_reg(endereco_atual)[0])
-            inicio_palavra = indice * 4
-            inicio = max(deslocamento_inicial, inicio_palavra)
-            fim = min(deslocamento_inicial + tamanho, inicio_palavra + len(palavra))
-            if inicio >= fim:
-                continue
+        print('Lendo memoria: %d bytes a partir de %s' % (tamanho, hex(endereco_inicial)))
+        if output:
+            pathlib.Path(output).parent.mkdir(parents=True, exist_ok=True)
+        with (open(output, 'wb') if output else contextlib.nullcontext()) as arquivo:
+            for indice in range(quantidade_palavras):
+                endereco_atual = endereco_alinhado + (indice * 4)
+                palavra = struct.pack('<I', processador.ler_reg(endereco_atual)[0])
+                inicio_palavra = indice * 4
+                inicio = max(deslocamento_inicial, inicio_palavra)
+                fim = min(deslocamento_inicial + tamanho, inicio_palavra + len(palavra))
+                if inicio >= fim:
+                    continue
 
-            trecho = palavra[inicio - inicio_palavra:fim - inicio_palavra]
-            dados.extend(trecho)
-            if arquivo:
-                arquivo.write(trecho)
+                trecho = palavra[inicio - inicio_palavra:fim - inicio_palavra]
+                dados.extend(trecho)
+                if arquivo:
+                    arquivo.write(trecho)
 
-            while trecho:
-                quantidade = min(16 - len(linha), len(trecho))
-                linha.extend(trecho[:quantidade])
-                trecho = trecho[quantidade:]
-                if len(linha) == 16:
-                    endereco_linha = endereco_inicial + len(dados) - len(trecho) - len(linha)
-                    print(asr_formatar_hexdump(endereco_linha, bytes(linha)), flush=True)
-                    linha.clear()
+                while trecho:
+                    quantidade = min(16 - len(linha), len(trecho))
+                    linha.extend(trecho[:quantidade])
+                    trecho = trecho[quantidade:]
+                    if len(linha) == 16:
+                        endereco_linha = endereco_inicial + len(dados) - len(trecho) - len(linha)
+                        print(asr_formatar_hexdump(endereco_linha, bytes(linha)), flush=True)
+                        linha.clear()
 
-        if linha:
-            print(asr_formatar_hexdump(endereco_inicial + len(dados) - len(linha), bytes(linha)), flush=True)
+            if linha:
+                print(asr_formatar_hexdump(endereco_inicial + len(dados) - len(linha), bytes(linha)), flush=True)
 
-    print('Leitura de memoria concluida: %d bytes a partir de %s' % (tamanho, hex(endereco_inicial)))
-    if output:
-        print('Dump salvo em: %s' % output)
+        print('Leitura de memoria concluida: %d bytes a partir de %s' % (tamanho, hex(endereco_inicial)))
+        if output:
+            print('Dump salvo em: %s' % output)
 
-    return bytes(dados)
+        return bytes(dados)
+    finally:
+        processador.sw_reset(0)
 
 
 def asr_snapshot(param, processador, config):

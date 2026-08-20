@@ -57,6 +57,7 @@ class ProcessadorSimulado:
         self.estados_dtr = []
         self.estados_rts = []
         self.modos_de_reset = []
+        self.modos_de_reset_software = []
         self.chamadas_de_apagamento = []
         self.leituras_de_registradores = []
         self.portas_com_falha_de_conexao = set(portas_com_falha_de_conexao or [])
@@ -98,6 +99,9 @@ class ProcessadorSimulado:
 
     def hw_reset(self, mode):
         self.modos_de_reset.append(mode)
+
+    def sw_reset(self, mode):
+        self.modos_de_reset_software.append(mode)
 
 
 class TestesDaLogicaDosComandos(unittest.TestCase):
@@ -166,6 +170,7 @@ class TestesDaLogicaDosComandos(unittest.TestCase):
 
         self.assertEqual(dados, b'\x02\x03\x04\x05\x06')
         self.assertEqual(processador.leituras_de_registradores, [0x20000000, 0x20000004])
+        self.assertEqual(processador.modos_de_reset_software, [0])
 
     def test_ler_mem_pode_escrever_dados_brutos_em_arquivo(self):
         processador = ProcessadorSimulado(
@@ -183,6 +188,20 @@ class TestesDaLogicaDosComandos(unittest.TestCase):
             self.assertEqual(arquivo_de_saida.read_bytes(), dados)
 
         self.assertEqual(dados, b'\x01\x02\x03\x04')
+        self.assertEqual(processador.modos_de_reset_software, [0])
+
+    def test_ler_mem_executa_reset_apos_falha_de_leitura(self):
+        processador = ProcessadorSimulado(
+            enderecos_com_falha_de_leitura={0x20000000}
+        )
+        configuracao = SimpleNamespace(portas_disponiveis=['COM1'])
+        parametros = SimpleNamespace(address=0x20000000, size=4, baud=921600, output=None)
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(CmdExcessao, 'read failed'):
+                asr_ler_mem(parametros, processador, configuracao)
+
+        self.assertEqual(processador.modos_de_reset_software, [0])
 
     def test_ler_mem_imprime_hexdump_progressivamente_por_linha(self):
         processador = ProcessadorSimulado(valores_de_registradores={
@@ -330,9 +349,9 @@ class TestesDaLogicaDosComandos(unittest.TestCase):
             mapa = asr_mapa_memoria(parametros, processador, configuracao, 'EEPROM emulada')
 
         self.assertEqual(mapa, ((
-            'EEPROM emulada', EEPROM_ENDERECO_V8_ASR6601CB,
-            EEPROM_ENDERECO_V8_ASR6601CB + EEPROM_SIZE_V8, EEPROM_SIZE_V8,
-        ),))
+                                    'EEPROM emulada', EEPROM_ENDERECO_V8_ASR6601CB,
+                                    EEPROM_ENDERECO_V8_ASR6601CB + EEPROM_SIZE_V8, EEPROM_SIZE_V8,
+                                ),))
 
     def test_mapa_eeprom_le_bytes_sem_apagar_quando_mcu_e_informado(self):
         enderecos = range(EEPROM_ENDERECO_ASR6601CB, EEPROM_ENDERECO_ASR6601CB + EEPROM_SIZE, 4)
