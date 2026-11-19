@@ -329,6 +329,8 @@ def cli_build_parser():
                                help='conferir a OTP antes de gravar e mostrar o resultado no final')
     parser_flash.add_argument('--mcu', choices=('ASR6601CB', 'ASR6601SE'),
                               help='variante conferida no equipamento')
+    parser_flash.add_argument('--eeprom-ab', action='store_true',
+                              help='usar as duas páginas da EEPROM do ASR6601SE (exige --mcu ASR6601SE)')
     parser_flash.add_argument('--serial-producao', metavar='SERIAL_HEX',
                               help='conferência opcional do serial lido automaticamente (16 dígitos hex)')
     parser_flash.add_argument('--somente-validar', action='store_true',
@@ -397,14 +399,17 @@ def cli_build_parser():
         parser_mapa.add_argument('--mcu', choices=('cb', 'se'),
                                  help='modelo conhecido; evita a identificacao por apagamento da EEPROM')
         if comando == Comandos.MAPA_EEPROM.value:
-            parser_mapa.add_argument('--eeprom-ab', action='store_true',
-                                     help='ler as duas páginas da EEPROM do PR439v3 (exige --mcu)')
+            modo_eeprom = parser_mapa.add_mutually_exclusive_group()
+            modo_eeprom.add_argument('--eeprom-ab', action='store_true',
+                                     help='ler as duas páginas da EEPROM do ASR6601SE (exige --mcu se)')
+            modo_eeprom.add_argument('--eeprom-ativa', action='store_true',
+                                     help='exportar uma página bruta, escolhida pelo cabeçalho (exige --mcu se)')
     parser_mapa_memoria = subparsers.add_parser(Comandos.MAPA_MEMORIA.value,
                                                 help='mostrar o mapa completo de memoria do MCU conectado')
     parser_mapa_memoria.add_argument('--mcu', choices=('cb', 'se'),
                                      help='modelo conhecido; evita a identificacao por apagamento da EEPROM')
     parser_mapa_memoria.add_argument('--eeprom-ab', action='store_true',
-                                     help='mostrar as duas páginas da EEPROM do PR439v3 (exige --mcu)')
+                                     help='mostrar as duas páginas da EEPROM do PR439v3 (exige --mcu se)')
     parser_comdiag = subparsers.add_parser(Comandos.COMDIAG.value,
                                            help='mostra diagnostico do ambiente e portas seriais')
     parser_comdiag.add_argument('--json', dest=Argumentos.JSON.value, action='store_true',
@@ -525,7 +530,9 @@ def cli_build_parser():
     parser_ota_cript_verify.add_argument('--key-header', dest=Argumentos.KEY_HEADER.value,
                                          help='header C com BOOT_SECURITY_KEY_BYTES')
 
-    subparsers.add_parser(Comandos.CLEAR_EEPROM.value, help='apagar a eeprom emulada')
+    parser_clear_eeprom = subparsers.add_parser(Comandos.CLEAR_EEPROM.value, help='apagar a EEPROM emulada')
+    parser_clear_eeprom.add_argument('--mcu', required=True, choices=('ASR6601CB', 'ASR6601SE'),
+                                     help='variante conferida no equipamento')
     subparsers.add_parser(Comandos.HELP.value, help='mostra essa mensagem de ajuda e sai')
     subparsers.add_parser(Comandos.VERSAO.value, help='mostra a versao do ASR Loader')
 
@@ -628,9 +635,9 @@ def main(argv=None):
         config.log('command=%s argv=%s baud=%d timeout=%s portas=%s' % (
             args.command,
             '[omitido]' if (
-                    args.command == Comandos.ESCREVER_OTP.value or getattr(args, 'producao', None) or getattr(args,
-                                                                                                              'producao_bin',
-                                                                                                              False))
+                args.command == Comandos.ESCREVER_OTP.value or getattr(args, 'producao', None) or getattr(args,
+                                                                                                          'producao_bin',
+                                                                                                          False))
             else (argv if argv is not None else sys.argv[1:]),
             args.baud,
             args.timeout,

@@ -26,11 +26,12 @@ O contrato do rodapé está em `core/make/producao-binario.md` no firmware.
 O *ASR6601 Reference Manual* v1.3.0, §§10.3.1 e 10.3.2, identifica a OTP de
 1 KiB em `0x10001C00–0x10001FFF` e a programação simples em unidades de 8
 bytes. O driver `asr_flash_otp_program_data` recusa bytes previamente
-programados e usa `PROGRAM_DATA0/1` para as unidades de oito bytes. O
-*BootLoader Communication Notes* v0.1.0, §§1.4.6, 1.4.7 e 1.4.13, descreve
+programados e usa `PROGRAM_DATA0/1` para as unidades de oito bytes. O *BootLoader Communication Notes* v0.1.0, §§1.4.6,
+1.4.7 e 1.4.13, descreve
 WROTP, RDOTP e o número de série de oito bytes.
 
-A reserva inicial foi registrada em 2026-11-18. Com o mapa revisado, a faixa **`0x10001C00–0x10001C5F`** foi alocada ao registro
+A reserva inicial foi registrada em 2026-11-18. Com o mapa revisado, a faixa **`0x10001C00–0x10001C5F`** foi alocada ao
+registro
 EEPROM v1 do produto PR439v3. O responsável pela fabricação confirmou que os
 procedimentos disponíveis estão no repositório. A revisão do gravador e do
 firmware encontrou apenas referências genéricas e exemplos dos comandos OTP
@@ -49,20 +50,20 @@ separadas no bootloader da revisão usada, em uma unidade de engenharia.
 A base B é `0x10001C00`, e o último byte é `0x10001C5F`.
 Os inteiros de vários bytes usam little-endian.
 
-| Offset | Tamanho | Conteúdo |
-| --- | ---: | --- |
-| `0x00` | 1 | Versão do quadro, `0x01` |
-| `0x01` | 1 | Tamanho total, `0x60` (96 bytes) |
-| `0x02` | 2 | Versão inicial do firmware em BCD. A versão 900 ocupa `00 09` |
-| `0x04` | 4 | Identificador ASCII `EEPR` |
-| `0x08` | 32 | Chave fixa, na ordem dos pares hexadecimais |
-| `0x28` | 16 | Modelo ASCII, com preenchimento `00` à direita |
-| `0x38` | 2 | Flash nominal em KiB, 128 ou 256 |
-| `0x3A` | 2 | RAM nominal em KiB, 16 ou 64 |
-| `0x3C` | 20 | Data e hora de São Paulo (`America/Sao_Paulo`) em ASCII `AAAA-MM-DDTHH:MM:SS`, seguida pelo byte `00` |
-| `0x50` | 4 | CRC-32/ISO-HDLC sobre os offsets `0x00–0x4F` |
-| `0x54` | 4 | Complemento bit a bit do CRC-32 |
-| `0x58` | 8 | Marcador ASCII `CONFOTP1` |
+| Offset | Tamanho | Conteúdo                                                           |
+|--------|--------:|--------------------------------------------------------------------|
+| `0x00` |       1 | Versão do quadro, `0x01`                                           |
+| `0x01` |       1 | Tamanho total, `0x60` (96 bytes)                                   |
+| `0x02` |       2 | Versão inicial do firmware em BCD. A versão 900 ocupa `00 09`      |
+| `0x04` |       4 | Identificador ASCII `EEPR`                                         |
+| `0x08` |      32 | Chave fixa, na ordem dos pares hexadecimais                        |
+| `0x28` |      16 | Modelo ASCII, com preenchimento `00` à direita                     |
+| `0x38` |       2 | Flash nominal em KiB, 128 ou 256                                   |
+| `0x3A` |       2 | RAM nominal em KiB, 16 ou 64                                       |
+| `0x3C` |      20 | Data e hora em ASCII `AAAA-MM-DDTHH:MM:SS`, seguida pelo byte `00` |
+| `0x50` |       4 | CRC-32/ISO-HDLC sobre os offsets `0x00–0x4F`                       |
+| `0x54` |       4 | Complemento bit a bit do CRC-32                                    |
+| `0x58` |       8 | Marcador ASCII `CONFOTP1`                                          |
 
 O manifesto legado usa uma versão inteira de 0 a 9999, por exemplo `900`.
 O CRC equivale a `zlib.crc32(registro[:80])`. A variante vem da conferência

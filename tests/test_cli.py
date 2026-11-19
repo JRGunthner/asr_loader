@@ -16,8 +16,11 @@ class TestesDoAnalisadorCli(unittest.TestCase):
         self.assertEqual(argumentos.command, 'testeboot')
 
     def test_comando_clear_eeprom_esta_registrado(self):
-        argumentos = self.analisador.parse_args(['clear_eeprom'])
+        argumentos = self.analisador.parse_args(['clear_eeprom', '--mcu', 'ASR6601SE'])
         self.assertEqual(argumentos.command, 'clear_eeprom')
+        self.assertEqual(argumentos.mcu, 'ASR6601SE')
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            self.analisador.parse_args(['clear_eeprom'])
 
     def test_comando_identificar_mcu_esta_registrado(self):
         argumentos = self.analisador.parse_args(['identificar_mcu'])

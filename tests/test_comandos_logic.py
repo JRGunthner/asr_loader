@@ -1,13 +1,17 @@
 import contextlib
 import io
+import mmap
 import os
 import tempfile
 import unittest
+import struct
 from pathlib import Path
 from types import SimpleNamespace
 
 from src.comandos import (
+    _salvar_mapa_eeprom,
     asr_apagar_eeprom,
+    asr_clean_eeprom,
     asr_conectar,
     asr_controlar_linha_serial,
     asr_endereco_em_faixa_app,
@@ -105,6 +109,20 @@ class ProcessadorSimulado:
 
 
 class TestesDaLogicaDosComandos(unittest.TestCase):
+    def test_clear_eeprom_apaga_somente_a_faixa_do_mcu_informado(self):
+        for variante, v8, endereco, tamanho in (
+            ('ASR6601CB', False, EEPROM_ENDERECO_ASR6601CB, EEPROM_SIZE),
+            ('ASR6601SE', False, EEPROM_ENDERECO_ASR6601SE - EEPROM_SIZE, 2 * EEPROM_SIZE),
+            ('ASR6601SE', True, EEPROM_ENDERECO_ASR6601SE - EEPROM_SIZE, 2 * EEPROM_SIZE),
+        ):
+            with self.subTest(variante=variante, v8=v8):
+                processador = ProcessadorSimulado()
+                parametros = SimpleNamespace(mcu=variante, baud=921600)
+                configuracao = SimpleNamespace(portas_disponiveis=['COM1'], v8=v8)
+                asr_clean_eeprom(parametros, processador, configuracao)
+                self.assertEqual(processador.chamadas_de_apagamento, [(endereco, tamanho)])
+                self.assertEqual(processador.modos_de_reset_software, [0])
+
     def test_asr_fechar_porta_fecha_e_limpa_serial(self):
         processador = SimpleNamespace(ser=SerialDeFechamentoSimulada())
 
@@ -379,39 +397,96 @@ class TestesDaLogicaDosComandos(unittest.TestCase):
         self.assertEqual(dados, b'\x01\x02\x03\x04' * (EEPROM_SIZE // 4))
         self.assertEqual(processador.chamadas_de_apagamento, [])
 
-    def test_mapa_eeprom_ab_le_as_duas_paginas_sem_apagar(self):
-        for mcu, ultima_pagina in (
-            ('cb', 0x0801F000),
-            ('se', 0x0803F000),
-        ):
+    def test_mapa_eeprom_ab_le_as_duas_paginas_do_se_sem_apagar(self):
+        enderecos = range(0x0803E000, 0x08040000, 4)
+        processador = ProcessadorSimulado(valores_de_registradores={
+            endereco: 0xAAAAAAAA if endereco < 0x0803F000 else 0xBBBBBBBB
+            for endereco in enderecos
+        })
+        configuracao = SimpleNamespace(portas_disponiveis=['COM1'], v8=True)
+        with tempfile.TemporaryDirectory() as diretorio:
+            arquivo = Path(diretorio) / 'mapa.bin'
+            parametros = SimpleNamespace(baud=921600, mcu='se', eeprom_ab=True, output=arquivo)
+            with contextlib.redirect_stdout(io.StringIO()):
+                dados = asr_mapa_memoria(
+                    parametros, processador, configuracao, 'EEPROM emulada', ler_bytes=True
+                )
+            self.assertEqual(arquivo.read_bytes(), dados)
+        self.assertEqual(dados, b'\xAA' * 4096 + b'\xBB' * 4096)
+        self.assertEqual(processador.leituras_de_registradores, list(enderecos))
+        self.assertEqual(processador.chamadas_de_apagamento, [])
+
+    def test_mapa_eeprom_ab_exige_se_antes_de_conectar(self):
+        configuracao = SimpleNamespace(portas_disponiveis=['COM1'])
+        for mcu in (None, 'cb'):
             with self.subTest(mcu=mcu):
-                inicio = ultima_pagina - 4096
-                enderecos = range(inicio, ultima_pagina + 4096, 4)
-                processador = ProcessadorSimulado(valores_de_registradores={
-                    endereco: 0xAAAAAAAA if endereco < ultima_pagina else 0xBBBBBBBB
-                    for endereco in enderecos
-                })
-                configuracao = SimpleNamespace(portas_disponiveis=['COM1'], v8=True)
-                with tempfile.TemporaryDirectory() as diretorio:
-                    arquivo = Path(diretorio) / 'mapa.bin'
-                    parametros = SimpleNamespace(baud=921600, mcu=mcu, eeprom_ab=True, output=arquivo)
-                    with contextlib.redirect_stdout(io.StringIO()):
-                        dados = asr_mapa_memoria(
-                            parametros, processador, configuracao, 'EEPROM emulada', ler_bytes=True
-                        )
-                    self.assertEqual(arquivo.read_bytes(), dados)
-                self.assertEqual(dados, b'\xAA' * 4096 + b'\xBB' * 4096)
-                self.assertEqual(processador.leituras_de_registradores, list(enderecos))
+                processador = ProcessadorSimulado()
+                parametros = SimpleNamespace(baud=921600, mcu=mcu, eeprom_ab=True)
+                with self.assertRaisesRegex(CmdExcessao, '(?i)exige --mcu se'):
+                    asr_mapa_memoria(parametros, processador, configuracao)
+                self.assertEqual(processador.portas, [])
                 self.assertEqual(processador.chamadas_de_apagamento, [])
 
-    def test_mapa_eeprom_ab_sem_mcu_recusa_identificacao_por_apagamento(self):
-        processador = ProcessadorSimulado()
-        configuracao = SimpleNamespace(portas_disponiveis=['COM1'])
-        parametros = SimpleNamespace(baud=921600, eeprom_ab=True)
-        with self.assertRaisesRegex(CmdExcessao, 'exige --mcu'):
-            asr_mapa_memoria(parametros, processador, configuracao)
-        self.assertEqual(processador.portas, [])
-        self.assertEqual(processador.chamadas_de_apagamento, [])
+    def test_mapa_eeprom_exporta_pagina_bruta_com_ou_sem_geracao(self):
+        apagada = b'\xFF' * 4096
+        bruto_a = b'A' + apagada[1:]
+        bruto_b = b'B' + apagada[1:]
+        cifrada = apagada[:-16] + struct.pack('<4I', 10, 10 ^ 0xFFFFFFFF, 549, 0x48444533)
+        legada = bruto_b[:-16] + struct.pack('<4I', 11, 0, 11 ^ 0xFFFFFFFF, 0x48444532)
+        incompleta = bruto_b[:-16] + struct.pack('<4I', 12, 0, 549, 0x48444533)
+
+        for caso, primeira, segunda, indice, criterio in (
+            ('legada mais nova', cifrada, legada, 1, 'geração 11'),
+            ('maior geração na primeira', legada, cifrada, 0, 'geração 11'),
+            ('mesma geração', cifrada, cifrada, 0, 'geração 10'),
+            ('página cifrada sem autenticação', cifrada, apagada, 0, 'geração 10'),
+            ('complemento inválido', cifrada, incompleta, 0, 'geração 10'),
+            ('só primeira com dados', bruto_a, apagada, 0, 'sem geração identificável'),
+            ('só segunda com dados', apagada, bruto_b, 1, 'sem geração identificável'),
+            ('duas páginas sem cabeçalho', bruto_a, bruto_b, 1, 'sem geração identificável'),
+            ('duas páginas apagadas', apagada, apagada, 1, 'sem geração identificável'),
+        ):
+            with self.subTest(caso=caso):
+                bruto = primeira + segunda
+                enderecos = range(0x0803E000, 0x08040000, 4)
+                processador = ProcessadorSimulado(valores_de_registradores={
+                    endereco: struct.unpack_from('<I', bruto, endereco - 0x0803E000)[0]
+                    for endereco in enderecos
+                })
+                configuracao = SimpleNamespace(portas_disponiveis=['COM1'])
+                with tempfile.TemporaryDirectory() as diretorio:
+                    arquivo = Path(diretorio) / 'mapa.bin'
+                    arquivo.write_bytes(b'dump anterior')
+                    parametros = SimpleNamespace(baud=921600, mcu='se', eeprom_ativa=True, output=arquivo)
+                    with contextlib.redirect_stdout(io.StringIO()) as console:
+                        resultado = asr_mapa_memoria(parametros, processador, configuracao)
+                    esperado = (primeira, segunda)[indice]
+                    self.assertEqual(resultado, esperado)
+                    self.assertEqual(arquivo.read_bytes(), esperado)
+                    self.assertEqual(list(arquivo.parent.iterdir()), [arquivo])
+                    endereco_escolhido = 0x0803E000 + 4096 * indice
+                    self.assertIn(f'EEPROM 0x{endereco_escolhido:08X}', console.getvalue())
+                    self.assertIn(criterio, console.getvalue())
+                self.assertEqual(processador.leituras_de_registradores, list(enderecos))
+                self.assertEqual(processador.chamadas_de_apagamento, [])
+                self.assertEqual(processador.modos_de_reset_software, [0])
+
+    @unittest.skipUnless(os.name == 'nt', 'Bloqueio de arquivo mapeado no Windows')
+    def test_mapa_eeprom_preserva_dump_aberto_no_visualizador(self):
+        anterior = b'A' * 4096
+        pagina = b'B' * 4096
+        with tempfile.TemporaryDirectory() as diretorio:
+            caminho = Path(diretorio) / 'mapa_eeprom.bin'
+            caminho.write_bytes(anterior)
+            with caminho.open('rb') as arquivo, mmap.mmap(arquivo.fileno(), 0, access=mmap.ACCESS_READ) as visualizador:
+                with contextlib.redirect_stdout(io.StringIO()) as console:
+                    salvo = _salvar_mapa_eeprom(caminho, pagina)
+                self.assertEqual(visualizador[:], anterior)
+                self.assertIn('Arquivo anterior preservado', console.getvalue())
+            self.assertNotEqual(salvo, caminho)
+            self.assertEqual(salvo.parent, caminho.parent)
+            self.assertEqual(salvo.read_bytes(), pagina)
+            self.assertEqual(caminho.read_bytes(), anterior)
 
     def test_controlar_linha_serial_define_dtr_e_fecha_porta(self):
         processador = ProcessadorSimulado()

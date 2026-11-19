@@ -5,6 +5,7 @@ import json
 import os
 import pathlib
 import struct
+import tempfile
 import time
 from typing import TypedDict
 from .constantes import (
@@ -192,7 +193,7 @@ def asr_obter_mapa_memoria(variante, v8=False, eeprom_ab=False):
     else:
         raise Exception('ERROR: variante de MCU desconhecida: %s' % variante)
 
-    if eeprom_ab:
+    if eeprom_ab and variante == 'ASR6601SE':
         eeprom_address -= EEPROM_SIZE
         eeprom_size = 2 * EEPROM_SIZE
     elif v8:
@@ -212,9 +213,15 @@ def asr_obter_mapa_memoria(variante, v8=False, eeprom_ab=False):
 def asr_mapa_memoria(param, processador, config, espaco=None, ler_bytes=False):
     """Mostra ou le um espaco de memoria para o MCU conectado."""
     mcu_informado: str | None = getattr(param, 'mcu', None)
+    if getattr(param, 'eeprom_ativa', False):
+        if mcu_informado != 'se':
+            raise CmdExcessao('--eeprom-ativa exige --mcu se (ASR6601SE)')
+        return _asr_mapa_eeprom_ativa(param, processador, config)
+
     eeprom_ab = getattr(param, 'eeprom_ab', False)
-    if eeprom_ab and not mcu_informado:
-        raise CmdExcessao('--eeprom-ab exige --mcu cb ou --mcu se para uma leitura sem apagamento')
+    if eeprom_ab and mcu_informado != 'se':
+        raise CmdExcessao('--eeprom-ab exige --mcu SE (ASR6601SE)')
+
     if mcu_informado:
         variantes = {'cb': 'ASR6601CB', 'se': 'ASR6601SE'}
         variante = variantes[mcu_informado]
@@ -254,25 +261,106 @@ def asr_mapa_memoria(param, processador, config, espaco=None, ler_bytes=False):
     return mapa
 
 
+def _asr_mapa_eeprom_ativa(param, processador, config):
+    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
+        return b''
+
+    paginas = []
+    processador.sessao_reservada = True
+    try:
+        for endereco in (EEPROM_ENDERECO_ASR6601SE - EEPROM_SIZE, EEPROM_ENDERECO_ASR6601SE):
+            pagina = b''.join(
+                struct.pack('<I', processador.ler_reg(posicao)[0])
+                for posicao in range(endereco, endereco + EEPROM_SIZE, 4)
+            )
+            geracao, campo1, campo2, formato = struct.unpack_from('<4I', pagina, EEPROM_SIZE - 16)
+            # O complemento ocupa campos diferentes nos formatos legado (HDE2) e cifrado (HDE3).
+            complemento = {0x48444532: campo2, 0x48444533: campo1}.get(formato)
+            geracao_identificada = geracao if complemento == (geracao ^ 0xFFFFFFFF) else None
+            paginas.append((geracao_identificada, endereco, pagina))
+    finally:
+        try:
+            processador.sw_reset(0)
+        finally:
+            asr_fechar_porta(processador)
+
+    com_geracao = [candidata for candidata in paginas if candidata[0] is not None]
+    if com_geracao:
+        geracao, endereco, pagina = max(com_geracao, key=lambda candidata: candidata[0])
+        criterio = f'geração {geracao} indicada no cabeçalho'
+    else:
+        apagada = b'\xFF' * EEPROM_SIZE
+        com_dados = [candidata for candidata in paginas if candidata[2] != apagada]
+        _, endereco, pagina = (com_dados or paginas)[-1]
+        criterio = 'sem geração identificável, seleção pela área bruta'
+
+    saida = pathlib.Path(param.output or 'mapas_memoria/mapa_eeprom.bin')
+    saida = _salvar_mapa_eeprom(saida, pagina)
+
+    print(f'EEPROM 0x{endereco:08X}–0x{endereco + EEPROM_SIZE - 1:08X}, {criterio}')
+    for offset in range(0, EEPROM_SIZE, 16):
+        print(asr_formatar_hexdump(endereco + offset, pagina[offset:offset + 16]))
+    print(f'Dump salvo em: {saida} ({EEPROM_SIZE} bytes)')
+    return pagina
+
+
+def _salvar_mapa_eeprom(saida, pagina):
+    """Salva a página completa e preserva o arquivo anterior se estiver bloqueado."""
+    saida.parent.mkdir(parents=True, exist_ok=True)
+    temporario = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=saida.parent, prefix=f'{saida.stem}_', suffix=saida.suffix, delete=False
+        ) as arquivo:
+            temporario = pathlib.Path(arquivo.name)
+            arquivo.write(pagina)
+
+        try:
+            temporario.replace(saida)
+        except OSError as falha:
+            bloqueado = isinstance(falha, PermissionError) or getattr(falha, 'winerror', None) == 1224
+            if not bloqueado or not saida.is_file():
+                raise
+            print(f'Arquivo anterior preservado. O destino {saida} está indisponível para substituição.')
+            return temporario
+        return saida
+    except BaseException:
+        if temporario is not None:
+            with contextlib.suppress(OSError):
+                temporario.unlink(missing_ok=True)
+        raise
+
+
 def asr_clean_eeprom(param, processador, config):
+    variante = param.mcu
+    _, endereco, _, tamanho = asr_obter_mapa_memoria(
+        variante, v8=getattr(config, 'v8', False), eeprom_ab=variante == 'ASR6601SE'
+    )[-1]
     if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return
-    asr_apagar_eeprom(processador, v8=getattr(config, 'v8', False))
+    processador.erase(endereco, tamanho)
     processador.sw_reset(0)
 
 
 def asr_flash(param, processador, config):
+    eeprom_ab = getattr(param, 'eeprom_ab', False)
     if getattr(param, 'producao', None) is not None or getattr(param, 'producao_bin', False):
+        if eeprom_ab:
+            raise CmdExcessao('--eeprom-ab não se aplica à gravação de produção')
         return gravar_producao(param, processador, config)
 
     relatar_otp = getattr(param, 'relatar_otp', False)
     mcu = getattr(param, 'mcu', None)
-    if ((mcu and not relatar_otp) or getattr(param, 'serial_producao', None)
+    if ((mcu and not (relatar_otp or eeprom_ab)) or getattr(param, 'serial_producao', None)
         or getattr(param, 'somente_validar', False)):
         raise CmdExcessao('Informe --producao para usar opções de fabricação')
 
     if relatar_otp and not mcu:
         raise CmdExcessao('--relatar-otp exige a variante em --mcu')
+    if eeprom_ab and mcu != 'ASR6601SE':
+        raise CmdExcessao('--eeprom-ab exige --mcu ASR6601SE')
+
+    reserva_eeprom = asr_obter_mapa_memoria(mcu, eeprom_ab=True)[-1] if eeprom_ab else None
 
     relatorio_prevalidar = montar_prevalidar_flash(param.addr_file)
     if relatorio_prevalidar['errors']:
@@ -306,6 +394,9 @@ def asr_flash(param, processador, config):
 
         if len(dados) != item['size'] or binascii.crc32(dados) != item['crc32']:
             raise CmdExcessao('Arquivo alterado após a pré-validação')
+        if reserva_eeprom and not (ASR_APP_FLASH_START <= endereco < reserva_eeprom[1]
+                                   and endereco + len(dados) <= reserva_eeprom[1]):
+            raise CmdExcessao('A imagem de aplicação deve caber na flash interna antes da EEPROM')
 
         arquivos.append((endereco, caminho, dados, item['crc32']))
 
@@ -315,7 +406,7 @@ def asr_flash(param, processador, config):
     resumo_otp = inspecionar_otp_para_gravacao(processador, mcu) if relatar_otp else None
 
     try:
-        _gravar_arquivos_flash(arquivos, processador, config)
+        _gravar_arquivos_flash(arquivos, processador, config, reserva_eeprom)
     finally:
         if resumo_otp is not None:
             print(resumo_otp)
@@ -323,9 +414,18 @@ def asr_flash(param, processador, config):
     return True
 
 
-def _gravar_arquivos_flash(arquivos, processador, config):
+def _gravar_arquivos_flash(arquivos, processador, config, reserva_eeprom):
     if config.apaga_eeprom:
-        asr_apagar_eeprom(processador, mostrar_erros=False, v8=getattr(config, 'v8', False))
+        if reserva_eeprom:
+            _, inicio_eeprom, _, tamanho_eeprom = reserva_eeprom
+            try:
+                processador.erase(inicio_eeprom, tamanho_eeprom)
+                processador.verify(inicio_eeprom, tamanho_eeprom, binascii.crc32(b'\xFF' * tamanho_eeprom))
+            except Exception as falha:
+                raise CmdExcessao(f'Falha ao apagar ou verificar a EEPROM ({tamanho_eeprom} bytes) — {falha}') from falha
+            print(f'EEPROM apagada e verificada')
+        else:
+            asr_apagar_eeprom(processador, mostrar_erros=False, v8=getattr(config, 'v8', False))
 
     for endereco, pacote, dados, crc_pacote in arquivos:
         pacote_len = len(dados)

@@ -132,7 +132,7 @@ def estacao(tmp_path, monkeypatch):
 @pytest.mark.parametrize(('caso', 'esperado'), [
     ('vazio', 'OTP VAZIO'),
     ('incompleto', 'OTP INVÁLIDO/INCOMPLETO'),
-    ('valido', 'OTP VÁLIDO, versão inicial 0900, quadro v1, ASR6601CB, flash 128 KiB, RAM 16 KiB'),
+    ('valido', 'OTP VÁLIDO'),
     ('outra_chave', 'OTP INCOMPATÍVEL — Incompatibilidade com a chave'),
     ('outro_mcu', 'OTP INCOMPATÍVEL — Variante registrada difere'),
     ('sem_chave', 'OTP NÃO VERIFICADA — Configure ASR_ARQUIVO_CHAVE_EEPROM'),
@@ -160,17 +160,82 @@ def test_flash_relata_otp_sem_impedir_gravacao(estacao, monkeypatch, capsys, cas
         gravador.eventos.append('apagar')
 
     monkeypatch.setattr(gravador, 'erase', apagar)
-    monkeypatch.setattr(cli, 'ASRLoader', lambda config: gravador)
+    monkeypatch.setattr('src.cli.ASRLoader', lambda config: gravador)
     assert cli.main(['-p', param.port, '--eeprom', 'flash', '--relatar-otp', '--mcu', 'ASR6601CB',
                      hex(FLASH_INICIO), str(param.addr_file[1])]) == 0
     saida = capsys.readouterr().out
     assert esperado in saida
     assert CHAVE_TESTE.hex() not in saida
     if caso == 'valido':
-        assert '2026-11-18T09:30:00 (São Paulo)' in saida
+        assert saida.splitlines()[-2:] == ['OTP VÁLIDO', 'Gravado com sucesso']
     assert gravador.eventos[-4:] == ['apagar', 'gravar', 'verificar', 'reiniciar']
     assert gravador.unidades == []
     assert bytes(gravador.memoria) == registro
+
+
+@pytest.mark.parametrize('modo', ['apagar', 'preservar', 'falha_apagar', 'falha_verificar'])
+def test_flash_se_trata_as_duas_paginas_da_eeprom(estacao, monkeypatch, capsys, modo):
+    param, _, _, _ = estacao
+    registro = montar_registro(CHAVE_TESTE, 900, 'ASR6601SE', DATA_TESTE)
+    gravador = GravadorSimulado(registro)
+    eeprom = bytearray(b'A' * 4096 + b'B' * 4096)
+    inicio_eeprom = 0x0803E000
+
+    def apagar(endereco, tamanho):
+        if endereco == inicio_eeprom:
+            assert tamanho == len(eeprom)
+            gravador.eventos.append('apagar_eeprom')
+            if modo == 'falha_apagar':
+                raise CmdExcessao('falha simulada')
+            eeprom[:] = b'\xFF' * tamanho
+        else:
+            assert (endereco, tamanho) == (FLASH_INICIO, 16)
+            gravador.eventos.append('apagar')
+
+    def verificar(endereco, tamanho, crc):
+        if endereco == inicio_eeprom:
+            assert tamanho == len(eeprom)
+            assert crc == zlib.crc32(eeprom)
+            gravador.eventos.append('verificar_eeprom')
+            if modo == 'falha_verificar':
+                raise CmdExcessao('falha simulada')
+        else:
+            assert (endereco, tamanho) == (FLASH_INICIO, 16)
+            gravador.eventos.append('verificar')
+
+    monkeypatch.setattr(gravador, 'erase', apagar)
+    monkeypatch.setattr(gravador, 'verify', verificar)
+    monkeypatch.setattr('src.cli.ASRLoader', lambda config: gravador)
+    opcoes = ['--eeprom'] if modo == 'preservar' else []
+    codigo = cli.main(['-p', param.port, *opcoes, 'flash', '--eeprom-ab', '--relatar-otp',
+                       '--mcu', 'ASR6601SE', hex(FLASH_INICIO), str(param.addr_file[1])])
+
+    if modo.startswith('falha_'):
+        assert codigo == 1
+        assert 'Falha ao apagar ou verificar a EEPROM' in capsys.readouterr().err
+        assert 'apagar' not in gravador.eventos
+        assert 'gravar' not in gravador.eventos
+    else:
+        assert codigo == 0
+        if modo == 'apagar':
+            assert eeprom == b'\xFF' * 8192
+            assert gravador.eventos.index('verificar_eeprom') < gravador.eventos.index('gravar')
+        else:
+            assert eeprom == b'A' * 4096 + b'B' * 4096
+            assert 'apagar_eeprom' not in gravador.eventos
+    assert gravador.memoria == registro
+    assert gravador.unidades == []
+
+
+def test_flash_se_rejeita_imagem_que_invade_a_eeprom(estacao, monkeypatch, capsys):
+    param, _, _, _ = estacao
+    gravador = GravadorSimulado()
+    monkeypatch.setattr('src.cli.ASRLoader', lambda config: gravador)
+
+    assert cli.main(['-p', param.port, 'flash', '--eeprom-ab', '--mcu', 'ASR6601SE',
+                     '0x0803DFF8', str(param.addr_file[1])]) == 1
+    assert 'antes da EEPROM' in capsys.readouterr().err
+    assert not gravador.eventos
 
 
 def test_vazio_e_repeticao_preservam_versao_inicial(estacao):
@@ -297,7 +362,7 @@ def test_flash_de_producao_pela_cli(estacao, monkeypatch, tmp_path, capsys):
     param, _, _, _ = estacao
     caminho_log = tmp_path / 'producao.log'
     gravador = GravadorSimulado()
-    monkeypatch.setattr(cli, 'ASRLoader', lambda config: gravador)
+    monkeypatch.setattr('src.cli.ASRLoader', lambda config: gravador)
     assert cli.main(['-p', param.port, '--log-file', str(caminho_log), 'flash',
                      '--producao', str(param.producao), '--mcu', param.mcu,
                      *map(str, param.addr_file)]) == 0
@@ -327,7 +392,7 @@ def test_somente_validar_nunca_grava(estacao, monkeypatch, capsys, caso, codigo,
     gravador = GravadorSimulado(memoria)
     if caso == 'comunicacao':
         gravador.falha_leitura = 1
-    monkeypatch.setattr(cli, 'ASRLoader', lambda config: gravador)
+    monkeypatch.setattr('src.cli.ASRLoader', lambda config: gravador)
 
     assert cli.main(['-p', param.port, 'flash', '--somente-validar',
                      '--producao', str(param.producao), '--mcu', param.mcu,
@@ -343,7 +408,7 @@ def test_somente_validar_nunca_grava(estacao, monkeypatch, capsys, caso, codigo,
 
 def test_somente_validar_sem_producao_recusa_flash_legado(monkeypatch, capsys):
     gravador = GravadorSimulado()
-    monkeypatch.setattr(cli, 'ASRLoader', lambda config: gravador)
+    monkeypatch.setattr('src.cli.ASRLoader', lambda config: gravador)
     assert cli.main(['-p', 'COM_TESTE', 'flash', '--somente-validar', '0x08000000', 'app.bin']) == 1
     assert 'Informe --producao' in capsys.readouterr().err
     assert not gravador.eventos
@@ -367,7 +432,7 @@ def test_diagnosticar_otp_sem_arquivos(monkeypatch, capsys, modo, codigo, espera
         return bytes(memoria[offset:offset + tamanho - (modo == 'leitura_curta')])
 
     gravador.ler_otp = ler_otp
-    monkeypatch.setattr(cli, 'ASRLoader', lambda config: gravador)
+    monkeypatch.setattr('src.cli.ASRLoader', lambda config: gravador)
     assert cli.main(['-p', 'COM_TESTE', 'diagnosticar_otp']) == codigo
     saida = capsys.readouterr()
     assert esperado in saida.out + saida.err
@@ -396,7 +461,7 @@ def test_sondar_flash_sem_escritas(monkeypatch, capsys, modo, esperado):
         return (0xFFFFFFFF if modo == 'apagada' else 0xABCDEF01,)
 
     monkeypatch.setattr(gravador, 'ler_reg', ler_reg)
-    monkeypatch.setattr(cli, 'ASRLoader', lambda config: gravador)
+    monkeypatch.setattr('src.cli.ASRLoader', lambda config: gravador)
     assert cli.main(['-p', 'COM_TESTE', 'diagnosticar_flash_asr']) == 0
     saida = capsys.readouterr().out
     assert esperado in saida and 'Variante não confirmada' in saida
@@ -447,7 +512,7 @@ def test_ensaio_opt_in_de_escrita(monkeypatch, capsys, modo, codigo, mensagem):
     gravador.verify = verificar
     gravador.flash = gravar
     gravador.erase = apagar
-    monkeypatch.setattr(cli, 'ASRLoader', lambda config: gravador)
+    monkeypatch.setattr('src.cli.ASRLoader', lambda config: gravador)
     serial = '0102030405060708' if modo == 'serial_errado' else SERIAL_TESTE.hex()
     assert cli.main(['-p', 'COM_TESTE', 'diagnosticar_flash_asr', '--testar-escrita', serial]) == codigo
     saida = capsys.readouterr()
@@ -480,7 +545,7 @@ def test_previa_otp_pela_cli_oculta_chave_e_exibe_pacote_completo_quando_solicit
     def recusar_conexao(*_args, **_kwargs):
         pytest.fail('A prévia deve funcionar sem acessar a porta serial')
 
-    monkeypatch.setattr(cli, 'ASRLoader', recusar_conexao)
+    monkeypatch.setattr('src.cli.ASRLoader', recusar_conexao)
     argumentos = ['otp_producao_inspect', str(caminho), '--mcu', 'ASR6601CB']
     assert cli.main(argumentos) == 0
     saida = capsys.readouterr().out

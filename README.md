@@ -454,11 +454,15 @@ python asr_loader.py flash 0x08000000 app.bin
 
 Grava o arquivo `app.bin` no endereço 0x08000000.
 
+Para a aplicação do PR439v3, `flash --eeprom-ab --mcu ASR6601SE` apaga e
+verifica os 8 KiB da EEPROM emulada antes de gravar a aplicação. Use a opção
+global `--eeprom` para preservar as duas páginas.
+
 Para gravar com conferência da OTP do PR439v3, use `flash --relatar-otp --mcu ASR6601SE`
 ou indique `ASR6601CB` conforme a placa. O gravador lê o quadro de 96 bytes antes
 de apagar a flash e informa o estado no fim. Se o quadro estiver válido, confere o
-modelo e a chave indicada por `ASR_ARQUIVO_CHAVE_EEPROM` e exibe a versão inicial,
-o modelo, as capacidades e a data gravada, com a chave oculta. OTP vazia, inválida,
+modelo e a chave indicada por `ASR_ARQUIVO_CHAVE_EEPROM` e exibe apenas
+`OTP VÁLIDO` quando tudo confere. OTP vazia, inválida,
 incompatível ou cuja leitura ou chave não pôde ser conferida gera um aviso e
 permite a gravação. A opção apenas lê a OTP.
 
@@ -505,7 +509,7 @@ Requer `--mcu` e dispensa porta serial e chave.
 Mostra a tabela de campos e os 96 bytes, em hexadecimal, do quadro que
 seria gravado em uma OTP vazia. Usa o mesmo binário ASRPROD, a mesma variante
 e a mesma chave da EEPROM da gravação de produção. Funciona sem porta
-serial. A data e hora de São Paulo e o CRC são recalculados na gravação.
+serial. A data/hora e o CRC são recalculados na gravação.
 
 ```powershell
 $env:ASR_ARQUIVO_CHAVE_EEPROM = Read-Host 'Caminho do arquivo da chave da EEPROM'
@@ -727,22 +731,21 @@ MCU pode ficar invertido em relação ao estado lógico enviado pelo software. P
 
 ### clear_eeprom
 
-Apaga toda a memória EEPROM do microcontrolador.
+Apaga a EEPROM emulada da variante informada. No ASR6601SE, apaga as duas
+páginas físicas de `0x0803E000` a `0x0803FFFF` (8 KiB), inclusive com `--v8`.
+No ASR6601CB, apaga a última página física (4 KiB).
 
 **Formato:**
 
 ```text
-clear_eeprom
+clear_eeprom --mcu {ASR6601CB,ASR6601SE}
 ```
 
 **Exemplo:**
 
 ```powershell
-python asr_loader.py clear_eeprom
+python asr_loader.py -p COM9 clear_eeprom --mcu ASR6601SE
 ```
-
-Apaga toda a memória EEPROM do microcontrolador.
-Exemplo de saída: `EEPROM apagada com sucesso!`
 
 ---
 
@@ -1558,14 +1561,23 @@ Lê todos os 4 KiB da EEPROM emulada do MCU detectado e gera `mapas_memoria\mapa
 python asr_loader.py -p COM9 mapa_eeprom
 ```
 
-Para o PR439v3, use `--eeprom-ab` e informe o MCU conhecido. O dump bruto contém
-as duas páginas físicas, com 8192 bytes ao todo. A faixa é `0x0801E000–0x0801FFFF`
-no CB ou `0x0803E000–0x0803FFFF` no SE. Esse modo exige `--mcu` e lê a flash
-sem apagar a EEPROM. Use a mesma opção em `mapa_memoria` para exibir a faixa.
+Para ASR6601SE, use `--eeprom-ab --mcu se`. O dump bruto contém
+as duas páginas físicas, com 8192 bytes no intervalo `0x0803E000–0x0803FFFF`.
+A leitura preserva a EEPROM. Use as mesmas opções em `mapa_memoria` para
+exibir a faixa.
 
 ```powershell
 python asr_loader.py -p COM9 mapa_eeprom --eeprom-ab --mcu se
 ```
+
+Para exportar uma página bruta do PR439v3, use `mapa_eeprom --eeprom-ativa --mcu se`.
+O gravador lê as duas páginas e salva 4096 bytes da página com maior geração
+indicada nos cabeçalhos reconhecidos. Na ausência de geração, escolhe a página
+com dados ou, em caso de empate, a última página física. O console mostra o
+endereço e o critério de seleção. As páginas são exportadas como estão na flash,
+e a leitura dispensa chave. Se o destino estiver bloqueado, o dump anterior
+é preservado e o novo é salvo com um sufixo exclusivo na mesma pasta.
+O caminho efetivamente usado aparece em `Dump salvo em`.
 
 ### Firmware v8: --v8
 

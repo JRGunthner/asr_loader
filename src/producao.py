@@ -361,7 +361,7 @@ def mostrar_previa_otp_producao(caminho, mcu, exibir_chave=False):
 
     base = OTP_EEPROM_PR439V3
     print(f'Prévia OTP de produção para uma OTP vazia (0x{base:08X}–0x{base + len(registro) - 1:08X})')
-    print('A data e hora de São Paulo e o CRC serão recalculados na gravação.')
+    print('A data e hora e o CRC serão recalculados na gravação.')
     print()
     print(f'{"Offset":<8} {"Bytes":>5}  {"Campo":<22} Valor')
 
@@ -420,7 +420,7 @@ def inspecionar_otp_para_gravacao(processador, mcu):
     except CmdExcessao as falha:
         return f'OTP NÃO VERIFICADA — {falha}'
 
-    estado, inicial = classificar_registro(registro)
+    estado, _ = classificar_registro(registro)
     if estado != 'VÁLIDO':
         return f'OTP {estado}'
 
@@ -434,7 +434,7 @@ def inspecionar_otp_para_gravacao(processador, mcu):
     except CmdExcessao as falha:
         return f'OTP INCOMPATÍVEL — {falha}'
 
-    return f'OTP VÁLIDO, versão inicial {inicial:04d}, {_resumir_metadados_otp(registro)}'
+    return 'OTP VÁLIDO'
 
 
 def provisionar(processador, base, chave, versao, mcu):
