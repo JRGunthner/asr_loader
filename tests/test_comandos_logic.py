@@ -379,6 +379,40 @@ class TestesDaLogicaDosComandos(unittest.TestCase):
         self.assertEqual(dados, b'\x01\x02\x03\x04' * (EEPROM_SIZE // 4))
         self.assertEqual(processador.chamadas_de_apagamento, [])
 
+    def test_mapa_eeprom_ab_le_as_duas_paginas_sem_apagar(self):
+        for mcu, ultima_pagina in (
+            ('cb', 0x0801F000),
+            ('se', 0x0803F000),
+        ):
+            with self.subTest(mcu=mcu):
+                inicio = ultima_pagina - 4096
+                enderecos = range(inicio, ultima_pagina + 4096, 4)
+                processador = ProcessadorSimulado(valores_de_registradores={
+                    endereco: 0xAAAAAAAA if endereco < ultima_pagina else 0xBBBBBBBB
+                    for endereco in enderecos
+                })
+                configuracao = SimpleNamespace(portas_disponiveis=['COM1'], v8=True)
+                with tempfile.TemporaryDirectory() as diretorio:
+                    arquivo = Path(diretorio) / 'mapa.bin'
+                    parametros = SimpleNamespace(baud=921600, mcu=mcu, eeprom_ab=True, output=arquivo)
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        dados = asr_mapa_memoria(
+                            parametros, processador, configuracao, 'EEPROM emulada', ler_bytes=True
+                        )
+                    self.assertEqual(arquivo.read_bytes(), dados)
+                self.assertEqual(dados, b'\xAA' * 4096 + b'\xBB' * 4096)
+                self.assertEqual(processador.leituras_de_registradores, list(enderecos))
+                self.assertEqual(processador.chamadas_de_apagamento, [])
+
+    def test_mapa_eeprom_ab_sem_mcu_recusa_identificacao_por_apagamento(self):
+        processador = ProcessadorSimulado()
+        configuracao = SimpleNamespace(portas_disponiveis=['COM1'])
+        parametros = SimpleNamespace(baud=921600, eeprom_ab=True)
+        with self.assertRaisesRegex(CmdExcessao, 'exige --mcu'):
+            asr_mapa_memoria(parametros, processador, configuracao)
+        self.assertEqual(processador.portas, [])
+        self.assertEqual(processador.chamadas_de_apagamento, [])
+
     def test_controlar_linha_serial_define_dtr_e_fecha_porta(self):
         processador = ProcessadorSimulado()
         configuracao = SimpleNamespace(portas_disponiveis=['COM3'])

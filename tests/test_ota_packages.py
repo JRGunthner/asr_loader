@@ -1,15 +1,14 @@
 import contextlib
 import io
+import struct
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
 from src.comandos import asr_ota_pack, asr_ota_pack_ler_info
-from src.ota_assinado import (
+from src.ota_comum import (
     append_ota_tche_sufixo,
-    build_ota_assinado_package,
-    ota_assinado_verify_package,
     parse_key_from_header,
     split_ota_tche_sufixo,
 )
@@ -40,30 +39,6 @@ class TestesDosPacotesOta(unittest.TestCase):
             self.assertEqual(informacoes['firmware'], firmware)
             self.assertEqual(informacoes['fw_size'], len(firmware))
             self.assertEqual(informacoes['reservado'], 0)
-
-    def test_pacote_assinado_completa_ciclo_de_ida_e_volta(self):
-        firmware = b'firmware de teste assinado'
-        chave = bytes(range(16))
-
-        pacote = build_ota_assinado_package(firmware, firmware_version=7, key=chave)
-        tamanho, versao, etiqueta_de_autenticacao = ota_assinado_verify_package(
-            pacote, chave
-        )
-
-        self.assertEqual(tamanho, len(firmware))
-        self.assertEqual(versao, 7)
-        self.assertEqual(len(etiqueta_de_autenticacao), 16)
-
-    def test_pacote_assinado_rejeita_conteudo_adulterado(self):
-        firmware = b'firmware de teste assinado'
-        chave = bytes(range(16))
-        pacote = bytearray(
-            build_ota_assinado_package(firmware, firmware_version=7, key=chave)
-        )
-        pacote[20] ^= 0x01
-
-        with self.assertRaises(ValueError):
-            ota_assinado_verify_package(bytes(pacote), chave)
 
     def test_analisar_chave_do_cabecalho_aceita_decimal_multilinha_e_sufixos_c(self):
         with tempfile.TemporaryDirectory() as diretorio_temporario:
@@ -135,17 +110,14 @@ class TestesDosPacotesOta(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'auth_tag'):
             verificar_pacote_seguro(bytes(pacote), chave)
 
-    def test_verificacao_segura_aceita_pacote_assinado_legado(self):
-        firmware = b'legacy assinado'
+    def test_verificacao_segura_rejeita_trailer_de_versao_1(self):
+        firmware = bytes(range(64))
         chave = bytes(range(16))
-        pacote = build_ota_assinado_package(
-            firmware, firmware_version=3, key=chave
-        )
+        pacote = bytearray(montar_pacote_seguro(firmware, versao_firmware=3, chave=chave))
+        struct.pack_into('<I', pacote, 16 + len(firmware) + 4, 1)
 
-        pacote_analisado, texto_simples = verificar_pacote_seguro(pacote, chave)
-
-        self.assertEqual(texto_simples, firmware)
-        self.assertEqual(pacote_analisado.versao_trailer, 1)
+        with self.assertRaisesRegex(ValueError, 'Versao de trailer nao suportada: 1'):
+            verificar_pacote_seguro(bytes(pacote), chave)
 
     def test_siphash_ctr_xor_e_reversivel(self):
         firmware = b'payload claro'

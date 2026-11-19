@@ -33,6 +33,7 @@ class ASRLoader(object):
         self.ser = None
         self.config = config
         self._trace_serial = None
+        self.sessao_reservada = False
 
     def _trace(self, event, **campos):
         if hasattr(self.config, 'trace'):
@@ -248,41 +249,47 @@ class ASRLoader(object):
         pkt = struct.pack(b'<BBH', 0xFE, cmd, len(buf)) + buf
         checksum = zlib.crc32(pkt) & 0xFFFFFFFF
         pkt += struct.pack(b'<IB', checksum, 0xEF)
-        tx_hex = binascii.hexlify(pkt).decode('ascii')
+        reservado = self.sessao_reservada or cmd in (CMD_RDOTP, CMD_WROTP)
         self._trace_serial = {
             'cmd': cmd,
             'tx_len': len(pkt),
             'start': time.perf_counter(),
+            'reservado': reservado,
         }
 
-        if self.config.verbose:
-            print('Tx[%d]:' % len(pkt), binascii.hexlify(pkt))
-        self.config.log('Tx[%d]: %s' % (len(pkt), tx_hex))
-        self._trace('serial_tx', cmd=cmd, tx_len=len(pkt), tx_hex=tx_hex)
+        if not reservado:
+            tx_hex = pkt.hex()
+            if self.config.verbose:
+                print('Tx[%d]:' % len(pkt), binascii.hexlify(pkt))
+            self.config.log('Tx[%d]: %s' % (len(pkt), tx_hex))
+            self._trace('serial_tx', cmd=cmd, tx_len=len(pkt), tx_hex=tx_hex)
 
         self.ser.flush_input()
-        self.ser.write(pkt)
+        enviados = self.ser.write(pkt)
+        if enviados is not None and enviados != len(pkt):
+            raise CmdExcessao("ERROR: envio serial incompleto")
 
     def aguardar_resposta(self):
+        reservado = (self._trace_serial or {}).get('reservado', False)
         header = self.ser.read(4)
-        if header == b'':
+        if len(header) != 4:
             self.config.log('Rx timeout header')
             self._trace_serial_result(error='timeout_header')
             raise CmdExcessao("ERROR: timeout leitura do header response")
         start, status, rsp_data_len = struct.unpack('<BBH', header)
         if start != 0xFE:
             self._trace_serial_result(status=status, rx_len=len(header),
-                                      rx_hex=binascii.hexlify(header).decode('ascii'),
+                                      rx_hex=None if reservado else header.hex(),
                                       error='bad_start_marker')
             raise CmdExcessao("ERROR: pacote de resposta errado")
         if rsp_data_len > 512:
             self._trace_serial_result(status=status, rx_len=len(header),
-                                      rx_hex=binascii.hexlify(header).decode('ascii'),
+                                      rx_hex=None if reservado else header.hex(),
                                       error='oversized_payload')
             raise CmdExcessao("ERROR: tamanho do pacote de resposta errado")
 
         remain_data = self.ser.read(rsp_data_len + 5)
-        if remain_data == b'':
+        if len(remain_data) != rsp_data_len + 5:
             self.config.log('Rx timeout dados')
             self._trace_serial_result(status=status, rx_len=len(header),
                                       rx_hex=binascii.hexlify(header).decode('ascii'),
@@ -290,11 +297,12 @@ class ASRLoader(object):
             raise CmdExcessao("ERROR: timeout leitura de dados")
 
         pkt = header + remain_data
-        rx_hex = binascii.hexlify(pkt).decode('ascii')
+        rx_hex = None if reservado else pkt.hex()
 
-        if self.config.verbose:
-            print('Rx[%d]:' % len(pkt), binascii.hexlify(pkt))
-        self.config.log('Rx[%d]: %s' % (len(pkt), rx_hex))
+        if not reservado:
+            if self.config.verbose:
+                print('Rx[%d]:' % len(pkt), binascii.hexlify(pkt))
+            self.config.log('Rx[%d]: %s' % (len(pkt), rx_hex))
 
         crc, end = struct.unpack('<IB', pkt[4 + rsp_data_len:])
 

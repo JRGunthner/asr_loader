@@ -31,10 +31,16 @@ from .diagnosticos import (
     parse_csv_ints,
 )
 from .exceptions import CmdExcessao
-from .ota_assinado import build_ota_assinado_package, crc32_ieee, default_key_header, parse_key_from_header, \
-    ota_assinado_verify_package, append_ota_tche_sufixo, split_ota_tche_sufixo
+from .producao import gravar_producao, inspecionar_otp_para_gravacao
+from .rodape_bin import separar_rodape
+from .ota_comum import (
+    append_ota_tche_sufixo,
+    crc32_ieee,
+    default_key_header,
+    parse_key_from_header,
+    split_ota_tche_sufixo,
+)
 from .ota_pacote_cripto import caminho_saida_segura_padrao, montar_pacote_seguro, verificar_pacote_seguro
-from .utils import get_crc32
 
 
 def asr_fechar_porta(processador):
@@ -174,7 +180,7 @@ def asr_identificar_mcu(param, processador, config):
     return variante
 
 
-def asr_obter_mapa_memoria(variante, v8=False):
+def asr_obter_mapa_memoria(variante, v8=False, eeprom_ab=False):
     if variante == 'ASR6601CB':
         flash_size = 128 * 1024
         sram_size = 16 * 1024
@@ -186,7 +192,10 @@ def asr_obter_mapa_memoria(variante, v8=False):
     else:
         raise Exception('ERROR: variante de MCU desconhecida: %s' % variante)
 
-    if v8:
+    if eeprom_ab:
+        eeprom_address -= EEPROM_SIZE
+        eeprom_size = 2 * EEPROM_SIZE
+    elif v8:
         eeprom_address = (EEPROM_ENDERECO_V8_ASR6601CB if variante == 'ASR6601CB'
                           else EEPROM_ENDERECO_V8_ASR6601SE)
         eeprom_size = EEPROM_SIZE_V8
@@ -202,7 +211,10 @@ def asr_obter_mapa_memoria(variante, v8=False):
 
 def asr_mapa_memoria(param, processador, config, espaco=None, ler_bytes=False):
     """Mostra ou le um espaco de memoria para o MCU conectado."""
-    mcu_informado = getattr(param, 'mcu', None)
+    mcu_informado: str | None = getattr(param, 'mcu', None)
+    eeprom_ab = getattr(param, 'eeprom_ab', False)
+    if eeprom_ab and not mcu_informado:
+        raise CmdExcessao('--eeprom-ab exige --mcu cb ou --mcu se para uma leitura sem apagamento')
     if mcu_informado:
         variantes = {'cb': 'ASR6601CB', 'se': 'ASR6601SE'}
         variante = variantes[mcu_informado]
@@ -214,7 +226,7 @@ def asr_mapa_memoria(param, processador, config, espaco=None, ler_bytes=False):
     if variante is None:
         return b'' if ler_bytes else ()
 
-    mapa = asr_obter_mapa_memoria(variante, v8=getattr(config, 'v8', False))
+    mapa = asr_obter_mapa_memoria(variante, v8=getattr(config, 'v8', False), eeprom_ab=eeprom_ab)
     if espaco is not None:
         mapa = tuple(regiao for regiao in mapa if regiao[0] == espaco)
 
@@ -250,49 +262,84 @@ def asr_clean_eeprom(param, processador, config):
 
 
 def asr_flash(param, processador, config):
+    if getattr(param, 'producao', None) is not None or getattr(param, 'producao_bin', False):
+        return gravar_producao(param, processador, config)
+
+    relatar_otp = getattr(param, 'relatar_otp', False)
+    mcu = getattr(param, 'mcu', None)
+    if ((mcu and not relatar_otp) or getattr(param, 'serial_producao', None)
+        or getattr(param, 'somente_validar', False)):
+        raise CmdExcessao('Informe --producao para usar opções de fabricação')
+
+    if relatar_otp and not mcu:
+        raise CmdExcessao('--relatar-otp exige a variante em --mcu')
+
     relatorio_prevalidar = montar_prevalidar_flash(param.addr_file)
     if relatorio_prevalidar['errors']:
         imprimir_prevalidar_flash(relatorio_prevalidar)
         raise Exception('ERROR: pré-validação falhou: %s' % '; '.join(relatorio_prevalidar['errors']))
+
     quantidade_arquivos = len(relatorio_prevalidar['items'])
     rotulo_arquivo = 'arquivo' if quantidade_arquivos == 1 else 'arquivos'
+
     print('Pré-validação TRI: %d %s, %d bytes' % (
         quantidade_arquivos,
         rotulo_arquivo,
         relatorio_prevalidar['total_size'],
     ))
+
     for aviso in relatorio_prevalidar['warnings']:
         print('Aviso: %s' % aviso)
-    arquivos = [(item['address'], item['path']) for item in relatorio_prevalidar['items']]
+
+    arquivos = []
+
+    for item in relatorio_prevalidar['items']:
+        caminho, endereco = item['path'], item['address']
+        dados, metadados = separar_rodape(pathlib.Path(caminho).read_bytes())
+
+        if metadados is not None:
+            if metadados['tipo'] in (0, 1):
+                raise CmdExcessao('Use --producao-bin para gravar um binário de produção')
+
+            if metadados['origem'] != endereco:
+                raise CmdExcessao('Endereço de gravação diverge dos metadados')
+
+        if len(dados) != item['size'] or binascii.crc32(dados) != item['crc32']:
+            raise CmdExcessao('Arquivo alterado após a pré-validação')
+
+        arquivos.append((endereco, caminho, dados, item['crc32']))
 
     if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return False
 
+    resumo_otp = inspecionar_otp_para_gravacao(processador, mcu) if relatar_otp else None
+
+    try:
+        _gravar_arquivos_flash(arquivos, processador, config)
+    finally:
+        if resumo_otp is not None:
+            print(resumo_otp)
+            config.log(resumo_otp)
+    return True
+
+
+def _gravar_arquivos_flash(arquivos, processador, config):
     if config.apaga_eeprom:
         asr_apagar_eeprom(processador, mostrar_erros=False, v8=getattr(config, 'v8', False))
 
-    for endereco, pacote in arquivos:
-        pacote_len = os.path.getsize(pacote)
-        crc_pacote = get_crc32(pacote)
+    for endereco, pacote, dados, crc_pacote in arquivos:
+        pacote_len = len(dados)
         processador.erase(endereco, pacote_len)
-
-        endereco_na_flash = endereco
 
         if config.verbose:
             print('Gravando', ' %s no endereco %s...' % (pacote, hex(endereco)))
         else:
             print('Gravando', end='', flush=True)
 
-        with open(pacote, 'rb') as arquivo:
-            while True:
-                line_data = arquivo.read(512)
-                if line_data == b'':
-                    break
-
-                processador.flash(endereco_na_flash, line_data)
-                endereco_na_flash += len(line_data)
-                if not config.verbose:
-                    print('.', end='', flush=True)
+        for offset in range(0, pacote_len, 512):
+            processador.flash(endereco + offset, dados[offset:offset + 512])
+            if not config.verbose:
+                print('.', end='', flush=True)
 
         processador.verify(endereco, pacote_len, crc_pacote)
 
@@ -300,7 +347,6 @@ def asr_flash(param, processador, config):
         print('.')
 
     processador.sw_reset(0)
-    return True
 
 
 def asr_escrever_otp(param, processador, config):
@@ -473,11 +519,14 @@ def asr_probe_sweep(param, processador_factory, config):
 
 
 def asr_verify(param, processador, config):
+    imagem, metadados = separar_rodape(pathlib.Path(param.filename).read_bytes())
+    if metadados is not None and metadados['origem'] != param.address:
+        raise CmdExcessao('Endereço de verificação diverge dos metadados')
     if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return
 
-    image_checksum = get_crc32(param.filename)
-    image_size = os.path.getsize(param.filename)
+    image_checksum = binascii.crc32(imagem)
+    image_size = len(imagem)
 
     print('Verificando %s no endereco %s...' % (param.filename, hex(param.address)))
     processador.verify(param.address, image_size, image_checksum)
@@ -511,7 +560,7 @@ def asr_ota_pack_ler_info(caminho_pacote) -> AsrOtaPackInfo:
         raise Exception('ERROR: arquivo nao encontrado: %s' % caminho_pacote)
 
     with open(caminho_pacote, 'rb') as arquivo:
-        pacote = arquivo.read()
+        pacote, _ = separar_rodape(arquivo.read())
 
     if len(pacote) < 16:
         raise Exception('ERROR: pacote OTA muito pequeno')
@@ -687,7 +736,7 @@ def asr_ota_pack(param):
         out_path = param.output
 
     with open(fw_path, 'rb') as arquivo:
-        fw_data = arquivo.read()
+        fw_data, _ = separar_rodape(arquivo.read())
 
     fw_size = len(fw_data)
     fw_crc = binascii.crc32(fw_data) & 0xFFFFFFFF
@@ -753,62 +802,6 @@ def asr_ota_pack_inspect(param):
     asr_imprimir_analise_vetor('  HardFault', hardfault_handler)
 
 
-def asr_ota_assinado(param):
-    fw_path = param.firmware
-    if not os.path.isfile(fw_path):
-        raise Exception('ERROR: arquivo nao encontrado: %s' % fw_path)
-
-    if param.output is None:
-        base, ext = os.path.splitext(fw_path)
-        out_path = '%s_ota_assinado%s' % (base, ext)
-    else:
-        out_path = param.output
-
-    key_header = pathlib.Path(
-        param.key_header).resolve() if param.key_header is not None else default_key_header().resolve()
-    key = parse_key_from_header(key_header)
-
-    with open(fw_path, 'rb') as arquivo:
-        fw_data = arquivo.read()
-
-    package = build_ota_assinado_package(fw_data, param.firmware_version, key)
-
-    with open(out_path, 'wb') as arquivo:
-        arquivo.write(package)
-
-    _size, _version, auth_tag = ota_assinado_verify_package(package, key)
-
-    print('Firmware : %s' % fw_path)
-    print('Tamanho  : %d bytes (0x%X)' % (len(fw_data), len(fw_data)))
-    print('CRC32    : 0x%08X' % crc32_ieee(fw_data))
-    print('Versao   : %d' % param.firmware_version)
-    print('AuthTag  : %s' % auth_tag.hex())
-    print('Chave    : %s' % key_header)
-    print('Saida    : %s  (%d bytes no total)' % (out_path, len(package)))
-    print('Grave o arquivo de saida a partir do endereco 0x00000000 da flash externa.')
-
-
-def asr_ota_assinado_verify(param):
-    package_path = param.input
-    if not os.path.isfile(package_path):
-        raise Exception('ERROR: arquivo nao encontrado: %s' % package_path)
-
-    key_header = pathlib.Path(
-        param.key_header).resolve() if param.key_header is not None else default_key_header().resolve()
-    key = parse_key_from_header(key_header)
-
-    with open(package_path, 'rb') as arquivo:
-        package = arquivo.read()
-
-    size, version, auth_tag = ota_assinado_verify_package(package, key)
-
-    print('Pacote   : %s' % package_path)
-    print('Firmware : %d bytes (0x%X)' % (size, size))
-    print('Versao   : %d' % version)
-    print('AuthTag  : %s' % auth_tag.hex())
-    print('Chave    : %s' % key_header)
-
-
 def asr_ota_cript(param):
     caminho_firmware = pathlib.Path(param.firmware)
     if not caminho_firmware.is_file():
@@ -819,7 +812,7 @@ def asr_ota_cript(param):
     cabecalho_chave = pathlib.Path(
         param.key_header).resolve() if param.key_header is not None else default_key_header().resolve()
     chave = parse_key_from_header(cabecalho_chave)
-    dados_firmware = caminho_firmware.read_bytes()
+    dados_firmware, _ = separar_rodape(caminho_firmware.read_bytes())
 
     pacote = montar_pacote_seguro(dados_firmware, param.firmware_version, chave)
     caminho_saida.parent.mkdir(parents=True, exist_ok=True)
@@ -839,7 +832,7 @@ def asr_ota_cript(param):
     print('Grave o arquivo de saida a partir do endereco 0x00000000 da flash externa.')
 
 
-def asr_ota_ota_verify(param):
+def asr_ota_cript_verify(param):
     caminho_pacote = pathlib.Path(param.input)
     if not caminho_pacote.is_file():
         raise Exception('ERROR: arquivo nao encontrado: %s' % caminho_pacote)
@@ -856,7 +849,6 @@ def asr_ota_ota_verify(param):
     print('Firmware         : %d bytes (0x%X)' % (pacote_parseado.tamanho, pacote_parseado.tamanho))
     print('Firmware CRC32   : 0x%08X' % pacote_parseado.crc32_firmware_claro)
     print('Versao           : %d' % pacote_parseado.versao_firmware)
-    if pacote_parseado.nonce:
-        print('Nonce            : %s' % pacote_parseado.nonce.hex())
+    print('Nonce            : %s' % pacote_parseado.nonce.hex())
     print('AuthTag          : %s' % pacote_parseado.tag_autenticacao.hex())
     print('Chave            : %s' % cabecalho_chave)

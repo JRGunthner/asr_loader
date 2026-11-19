@@ -67,6 +67,8 @@ call :copy_to "D:\projetos\pr439v1-postyou-dlms\tools"
 if errorlevel 1 exit /b 1
 call :copy_to "D:\projetos\pr439v2-postyou-dlms\tools"
 if errorlevel 1 exit /b 1
+call :copy_to "D:\projetos\pr439v3-postyou-dlms\tools"
+if errorlevel 1 exit /b 1
 call :copy_to "D:\projetos\pr413v6-postyou-abnt\tools"
 if errorlevel 1 exit /b 1
 

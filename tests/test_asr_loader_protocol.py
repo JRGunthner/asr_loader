@@ -96,6 +96,25 @@ def criar_carregador(serial_simulada=None):
 
 
 class TestesDoProtocoloASRLoader(unittest.TestCase):
+    def test_quadros_otp_nao_expoem_dados_nem_crc(self):
+        chave_ficticia = bytes(range(1, 33))
+        recebido = montar_pacote_de_resposta(dados=chave_ficticia)
+        resposta_escrita = montar_pacote_de_resposta()
+        porta = SerialSimulada([resposta_escrita[:4], resposta_escrita[4:],
+                                recebido[:4], recebido[4:]])
+        carregador, configuracao = criar_carregador(porta)
+        configuracao.verbose = True
+        configuracao.trace = mock.Mock()
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            carregador.escrever_otp(0x10001D00, chave_ficticia[:8])
+            self.assertEqual(carregador.ler_otp(0x10001D00, 32), chave_ficticia)
+        self.assertEqual(saida.getvalue(), '')
+        self.assertEqual(configuracao.logs, [])
+        for chamada in configuracao.trace.call_args_list:
+            self.assertNotIn('rx_hex', chamada.kwargs)
+            self.assertNotIn('tx_hex', chamada.kwargs)
+
     def obter_comando_escrito(self, serial_simulada, indice=0):
         pacote = serial_simulada.writes[indice]
         inicio, comando, tamanho_dados = struct.unpack('<BBH', pacote[:4])

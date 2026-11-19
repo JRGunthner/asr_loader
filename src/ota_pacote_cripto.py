@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from .rodape_bin import separar_rodape
 import secrets
 import struct
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Tuple
 
-from .ota_assinado import (
+from .ota_comum import (
     OTA_AUTH_FLAG_SIPHASH128,
     OTA_AUTH_TRAILER_MAGIC,
     OTA_HEADER_SIZE,
@@ -20,10 +21,8 @@ from .ota_assinado import (
     split_ota_tche_sufixo,
 )
 
-OTA_AUTH_TRAILER_VERSION_LEGADO = 1
 OTA_AUTH_TRAILER_VERSION_CRIPTO = 2
 OTA_AUTH_FLAG_CRIPTO_SIPHASH64_CTR = 0x00000002
-TAMANHO_TRAILER_LEGADO = 36
 TAMANHO_TRAILER_CRIPTO = 44
 
 
@@ -68,10 +67,7 @@ def caminho_saida_segura_padrao(caminho_firmware: Path) -> Path:
 
 def montar_prefixo_seguro(versao_trailer: int, flags: int, versao_firmware: int, tamanho_firmware: int,
                           crc32_firmware_claro: int, nonce: bytes) -> bytes:
-    prefixo = struct.pack('<IIIII', versao_trailer, flags, versao_firmware, tamanho_firmware, crc32_firmware_claro)
-    if versao_trailer == OTA_AUTH_TRAILER_VERSION_CRIPTO:
-        prefixo += nonce
-    return prefixo
+    return struct.pack('<IIIII', versao_trailer, flags, versao_firmware, tamanho_firmware, crc32_firmware_claro) + nonce
 
 
 def montar_pacote_seguro(firmware: bytes, versao_firmware: int, chave: bytes, nonce: Optional[bytes] = None) -> bytes:
@@ -105,7 +101,8 @@ def montar_pacote_seguro(firmware: bytes, versao_firmware: int, chave: bytes, no
 
 
 def ler_pacote_seguro(pacote: bytes) -> PacoteOtaSeguroParseado:
-    if len(pacote) < OTA_HEADER_SIZE + TAMANHO_TRAILER_LEGADO:
+    pacote, _ = separar_rodape(pacote)
+    if len(pacote) < OTA_HEADER_SIZE + TAMANHO_TRAILER_CRIPTO:
         raise ValueError('Arquivo OTA muito pequeno')
 
     magic_header, tamanho, crc32_firmware_claro, reservado = struct.unpack_from('<IIII', pacote, 0)
@@ -126,22 +123,15 @@ def ler_pacote_seguro(pacote: bytes) -> PacoteOtaSeguroParseado:
     if len(firmware_criptografado) != tamanho:
         raise ValueError('Tamanho do payload nao confere com o header')
 
-    if versao_trailer == OTA_AUTH_TRAILER_VERSION_LEGADO:
-        tamanho_trailer = TAMANHO_TRAILER_LEGADO
-        pacote = split_ota_tche_sufixo(pacote, offset_trailer + tamanho_trailer)
-        tag_autenticacao = pacote[offset_trailer + 16:offset_trailer + 32]
-        crc32_trailer = struct.unpack_from('<I', pacote, offset_trailer + 32)[0]
-        nonce = b''
-    elif versao_trailer == OTA_AUTH_TRAILER_VERSION_CRIPTO:
-        tamanho_trailer = TAMANHO_TRAILER_CRIPTO
-        pacote = split_ota_tche_sufixo(pacote, offset_trailer + tamanho_trailer)
-        nonce = pacote[offset_trailer + 16:offset_trailer + 24]
-        tag_autenticacao = pacote[offset_trailer + 24:offset_trailer + 40]
-        crc32_trailer = struct.unpack_from('<I', pacote, offset_trailer + 40)[0]
-    else:
+    if versao_trailer != OTA_AUTH_TRAILER_VERSION_CRIPTO:
         raise ValueError('Versao de trailer nao suportada: %d' % versao_trailer)
 
-    trailer_sem_crc = pacote[offset_trailer:offset_trailer + tamanho_trailer - 4]
+    pacote = split_ota_tche_sufixo(pacote, offset_trailer + TAMANHO_TRAILER_CRIPTO)
+    nonce = pacote[offset_trailer + 16:offset_trailer + 24]
+    tag_autenticacao = pacote[offset_trailer + 24:offset_trailer + 40]
+    crc32_trailer = struct.unpack_from('<I', pacote, offset_trailer + 40)[0]
+
+    trailer_sem_crc = pacote[offset_trailer:offset_trailer + TAMANHO_TRAILER_CRIPTO - 4]
     if crc32_ieee(trailer_sem_crc) != crc32_trailer:
         raise ValueError('CRC do trailer invalido')
 
@@ -163,36 +153,24 @@ def ler_pacote_seguro(pacote: bytes) -> PacoteOtaSeguroParseado:
 def verificar_pacote_seguro(pacote: bytes, chave: bytes) -> Tuple[PacoteOtaSeguroParseado, bytes]:
     pacote_parseado = ler_pacote_seguro(pacote)
 
-    if pacote_parseado.versao_trailer == OTA_AUTH_TRAILER_VERSION_LEGADO:
-        if pacote_parseado.flags != OTA_AUTH_FLAG_SIPHASH128:
-            raise ValueError('flags invalidas para trailer legado: 0x%08X' % pacote_parseado.flags)
-        prefixo = montar_prefixo_seguro(
-            pacote_parseado.versao_trailer,
-            pacote_parseado.flags,
-            pacote_parseado.versao_firmware,
-            pacote_parseado.tamanho,
-            pacote_parseado.crc32_firmware_claro,
-            b'',
-        )
-        firmware_claro = pacote_parseado.firmware_criptografado
-        tag_autenticacao_esperada = siphash128(prefixo + firmware_claro, chave)
-    else:
-        flags_esperadas = OTA_AUTH_FLAG_SIPHASH128 | OTA_AUTH_FLAG_CRIPTO_SIPHASH64_CTR
-        if pacote_parseado.flags != flags_esperadas:
-            raise ValueError('flags invalidas para trailer criptografado: 0x%08X' % pacote_parseado.flags)
-        prefixo = montar_prefixo_seguro(
-            pacote_parseado.versao_trailer,
-            pacote_parseado.flags,
-            pacote_parseado.versao_firmware,
-            pacote_parseado.tamanho,
-            pacote_parseado.crc32_firmware_claro,
-            pacote_parseado.nonce,
-        )
-        tag_autenticacao_esperada = siphash128(prefixo + pacote_parseado.firmware_criptografado, chave)
-        firmware_claro = aplicar_siphash64_ctr_xor(pacote_parseado.firmware_criptografado, chave, pacote_parseado.nonce)
+    flags_esperadas = OTA_AUTH_FLAG_SIPHASH128 | OTA_AUTH_FLAG_CRIPTO_SIPHASH64_CTR
+    if pacote_parseado.flags != flags_esperadas:
+        raise ValueError('flags invalidas para trailer criptografado: 0x%08X' % pacote_parseado.flags)
+    prefixo = montar_prefixo_seguro(
+        pacote_parseado.versao_trailer,
+        pacote_parseado.flags,
+        pacote_parseado.versao_firmware,
+        pacote_parseado.tamanho,
+        pacote_parseado.crc32_firmware_claro,
+        pacote_parseado.nonce,
+    )
+    tag_autenticacao_esperada = siphash128(prefixo + pacote_parseado.firmware_criptografado, chave)
 
     if tag_autenticacao_esperada != pacote_parseado.tag_autenticacao:
         raise ValueError('auth_tag invalida')
+    firmware_claro = aplicar_siphash64_ctr_xor(
+        pacote_parseado.firmware_criptografado, chave, pacote_parseado.nonce
+    )
     if crc32_ieee(firmware_claro) != pacote_parseado.crc32_firmware_claro:
         raise ValueError('CRC32 do firmware em claro invalido')
 
@@ -202,7 +180,6 @@ def verificar_pacote_seguro(pacote: bytes, chave: bytes) -> Tuple[PacoteOtaSegur
 __all__ = [
     'OTA_AUTH_FLAG_CRIPTO_SIPHASH64_CTR',
     'OTA_AUTH_TRAILER_VERSION_CRIPTO',
-    'OTA_AUTH_TRAILER_VERSION_LEGADO',
     'PacoteOtaSeguroParseado',
     'aplicar_siphash64_ctr_xor',
     'caminho_saida_segura_padrao',

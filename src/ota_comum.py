@@ -7,14 +7,9 @@ from typing import Tuple
 OTA_MAGIC = 0xB00710AD
 OTA_HEADER_SIZE = 16
 OTA_AUTH_TRAILER_MAGIC = 0x41545548
-OTA_AUTH_TRAILER_VERSION = 1
 OTA_AUTH_FLAG_SIPHASH128 = 0x00000001
-OTA_AUTH_TAG_SIZE = 16
 OTA_TCHE_SUFFIX = bytes((0x00, 0x54, 0x43, 0x48, 0x45, 0x00))
 OTA_TCHE_SUFFIX_SIZE = len(OTA_TCHE_SUFFIX)
-TRAILER_STRUCT = struct.Struct("<IIII16sI")
-HEADER_STRUCT = struct.Struct("<IIII")
-PREFIX_STRUCT = struct.Struct("<IIIII")
 
 
 def crc32_ieee(data: bytes) -> int:
@@ -121,16 +116,6 @@ def parse_key_from_header(header_path: pathlib.Path) -> bytes:
     return bytes(values)
 
 
-def prefix_autenticado(firmware_version: int, firmware_size: int, firmware_crc32: int) -> bytes:
-    return PREFIX_STRUCT.pack(
-        OTA_AUTH_TRAILER_VERSION,
-        OTA_AUTH_FLAG_SIPHASH128,
-        firmware_version & 0xFFFFFFFF,
-        firmware_size & 0xFFFFFFFF,
-        firmware_crc32 & 0xFFFFFFFF,
-    )
-
-
 def append_ota_tche_sufixo(package: bytes) -> bytes:
     return package + OTA_TCHE_SUFFIX
 
@@ -145,68 +130,6 @@ def split_ota_tche_sufixo(package: bytes, expected_size: int) -> bytes:
         expected_size + OTA_TCHE_SUFFIX_SIZE,
         len(package),
     ))
-
-
-def build_ota_assinado_package(firmware: bytes, firmware_version: int, key: bytes) -> bytes:
-    firmware_crc32 = crc32_ieee(firmware)
-    header = HEADER_STRUCT.pack(OTA_MAGIC, len(firmware), firmware_crc32, 0)
-    prefix = prefix_autenticado(firmware_version, len(firmware), firmware_crc32)
-    auth_tag = siphash128(prefix + firmware, key)
-    trailer_without_crc = struct.pack(
-        "<IIII16s",
-        OTA_AUTH_TRAILER_MAGIC,
-        OTA_AUTH_TRAILER_VERSION,
-        OTA_AUTH_FLAG_SIPHASH128,
-        firmware_version & 0xFFFFFFFF,
-        auth_tag,
-    )
-    trailer_crc32 = crc32_ieee(trailer_without_crc)
-    trailer = TRAILER_STRUCT.pack(
-        OTA_AUTH_TRAILER_MAGIC,
-        OTA_AUTH_TRAILER_VERSION,
-        OTA_AUTH_FLAG_SIPHASH128,
-        firmware_version & 0xFFFFFFFF,
-        auth_tag,
-        trailer_crc32,
-    )
-    return append_ota_tche_sufixo(header + firmware + trailer)
-
-
-def ota_assinado_verify_package(package: bytes, key: bytes) -> Tuple[int, int, bytes]:
-    if len(package) < OTA_HEADER_SIZE + TRAILER_STRUCT.size:
-        raise ValueError("Pacote OTA muito pequeno")
-
-    magic, size, crc32_fw, _reserved = HEADER_STRUCT.unpack_from(package, 0)
-    if magic not in (0, OTA_MAGIC):
-        raise ValueError("Magic OTA invalido: 0x%08X" % magic)
-
-    expected_size = OTA_HEADER_SIZE + size + TRAILER_STRUCT.size
-    package = split_ota_tche_sufixo(package, expected_size)
-
-    firmware = package[OTA_HEADER_SIZE:OTA_HEADER_SIZE + size]
-    trailer = package[OTA_HEADER_SIZE + size:]
-    trailer_magic, trailer_version, flags, firmware_version, auth_tag, trailer_crc32 = TRAILER_STRUCT.unpack(trailer)
-
-    if trailer_magic != OTA_AUTH_TRAILER_MAGIC:
-        raise ValueError("Trailer de autenticacao invalido")
-    if trailer_version != OTA_AUTH_TRAILER_VERSION:
-        raise ValueError("Versao do trailer nao suportada")
-    if flags != OTA_AUTH_FLAG_SIPHASH128:
-        raise ValueError("Flags do trailer nao suportadas")
-
-    if crc32_ieee(trailer[:-4]) != trailer_crc32:
-        raise ValueError("CRC do trailer invalido")
-
-    crc_calculado = crc32_ieee(firmware)
-    if crc_calculado != crc32_fw:
-        raise ValueError("CRC do firmware invalido")
-
-    prefix = prefix_autenticado(firmware_version, size, crc32_fw)
-    auth_calculada = siphash128(prefix + firmware, key)
-    if auth_calculada != auth_tag:
-        raise ValueError("Tag criptografica invalida")
-
-    return size, firmware_version, auth_tag
 
 
 def default_key_header() -> pathlib.Path:

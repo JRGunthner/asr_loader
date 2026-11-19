@@ -4,6 +4,14 @@
 - Corrigido o tamanho da EEPROM emulada para 4KB, aplicando a faixa completa tanto no apagamento quanto no dump.
 - Adicionada a opção global `--v8` para usar o último 1KB da EEPROM reservada no firmware v8+ durante apagamentos, identificação e mapas.
 - Após ler o mapa de memória, executa um reset do mcu.
+- Remoção dos comandos de OTA somente autenticado e da aceitação de pacotes com trailer v1 no verificador do OTA criptografado.
+- Adição de `flash --producao-bin` para provisionar e gravar o PR439v3 a partir de um único binário, com leitura automática do serial e preservação das páginas da EEPROM.
+- Validação do rodapé ASRPROD v1 de 70 bytes e da marca final. A gravação usa somente a imagem extraída do binário. Os comandos `bin_inspect`, `bin_extrair`, `bin_empacotar` e `producao_inspect` permitem trabalhar com o rodapé sem acesso ao equipamento.
+- Provisionamento do quadro OTP v1 de 96 bytes com chave fixa de fabricação, versão inicial do firmware em BCD, modelo do chip, capacidades de flash e RAM e data UTC. O marcador é gravado por último. Registros válidos são preservados em novas tentativas.
+- A chave é carregada do arquivo apontado por `ASR_ARQUIVO_CHAVE_EEPROM`. Os quadros seriais de leitura e escrita da OTP são omitidos dos logs e do rastreamento.
+- Adição de `flash --somente-validar` e `diagnosticar_otp` para conferir a OTP sem gravá-la. O comando `diagnosticar_flash_asr` sonda a flash e oferece um ensaio de escrita opcional para unidades de bancada.
+- Adição de testes simulados para validação do binário, interrupções no provisionamento, preservação do quadro OTP e gravação somente dos bytes da imagem. O Makefile do firmware PR439v3 oferece `make validar_bin BIN=arquivo.bin` para inspeção offline.
+- Adição do comando `otp_producao_inspect` para exibir a tabela de campos e os 96 bytes do quadro OTP em hexadecimal, sem acessar a placa. A chave de fabricação é ocultada por padrão e pode ser exibida com `--exibir-chave`.
 
 ## v1.4 - 2026-08-10
 - `hw_reset` agora força estado inicial conhecido (`DTR=0`, `RTS=0`) antes de pulsar reset, reduzindo falhas por estado indefinido das linhas ao abrir a porta serial.

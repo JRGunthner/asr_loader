@@ -8,10 +8,12 @@ from typing import Dict, List, cast
 
 import serial
 
-from .ASRLoader import ASRLoader
+from .ASRLoader import ASRLoader as ASRLoader
 from .comandos import *
 from .constantes import BAUD_DEFAULT, TIMEOUT_DEFAULT, VERSAO_GRAVADOR
 from .runtime import RuntimeConfig
+from .producao import diagnosticar_flash_asr, diagnosticar_otp, ler_binario_producao, mostrar_previa_otp_producao
+from .rodape_bin import acrescentar_rodape, formatar_tabela_rodape, separar_rodape
 from .utils import arg_int, get_lista_portas_com, get_lista_portas_info
 
 
@@ -45,8 +47,6 @@ class Comandos(str, Enum):
     OTA_PACK = 'ota_pack'
     OTA_PACK_VERIFY = 'ota_pack_verify'
     OTA_PACK_INSPECT = 'ota_pack_inspect'
-    OTA_ASSINADO = 'ota_assinado'
-    OTA_ASSINADO_VERIFY = 'ota_assinado_verify'
     OTA_CRIPT = 'ota_cript'
     OTA_CRIPT_VERIFY = 'ota_cript_verify'
 
@@ -55,6 +55,8 @@ class Comandos(str, Enum):
     VERSAO_BOOTLOADER = 'versao_bootloader'
 
     LER_OTP = 'ler_otp'
+    DIAGNOSTICAR_OTP = 'diagnosticar_otp'
+    DIAGNOSTICAR_FLASH_ASR = 'diagnosticar_flash_asr'
     ESCREVER_OTP = 'escrever_otp'
 
     LER_OPT0 = 'ler_opt0'
@@ -319,8 +321,44 @@ def cli_build_parser():
     parser_erase.add_argument(Argumentos.SIZE.value, help='quantidade de bytes a serem apagados', type=arg_int)
 
     parser_flash = subparsers.add_parser(Comandos.FLASH.value, help='apagar e gravar a flash')
+    modo_producao = parser_flash.add_mutually_exclusive_group()
+    modo_producao.add_argument('--producao', metavar='MANIFESTO', help='gravar produção no formato legado com JSON')
+    modo_producao.add_argument('--producao-bin', action='store_true',
+                               help='validar metadados e gravar binário de produção')
+    modo_producao.add_argument('--relatar-otp', action='store_true',
+                               help='conferir a OTP antes de gravar e mostrar o resultado no final')
+    parser_flash.add_argument('--mcu', choices=('ASR6601CB', 'ASR6601SE'),
+                              help='variante conferida no equipamento')
+    parser_flash.add_argument('--serial-producao', metavar='SERIAL_HEX',
+                              help='conferência opcional do serial lido automaticamente (16 dígitos hex)')
+    parser_flash.add_argument('--somente-validar', action='store_true',
+                              help='classificar a OTP em modo de produção sem gravar')
     parser_flash.add_argument(Argumentos.ADDR_FILE.value, metavar='<address> <filename>',
                               help='endereco e nome do arquivo, Ex.: 0x08000000 app.bin', nargs='+')
+
+    parser_producao_inspect = subparsers.add_parser('producao_inspect',
+                                                    help='validar o binário de produção sem porta serial')
+    parser_producao_inspect.add_argument('arquivo')
+    parser_producao_inspect.add_argument('--mcu', required=True, choices=('ASR6601CB', 'ASR6601SE'))
+
+    parser_otp_producao = subparsers.add_parser(
+        'otp_producao_inspect', help='mostrar a tabela e o pacote OTP de produção sem conectar à placa')
+    parser_otp_producao.add_argument('arquivo', help='binário de produção com rodapé ASRPROD')
+    parser_otp_producao.add_argument('--mcu', required=True, choices=('ASR6601CB', 'ASR6601SE'))
+    parser_otp_producao.add_argument('--exibir-chave', action='store_true',
+                                     help='incluir a chave da EEPROM na saída hexadecimal')
+
+    parser_bin_inspect = subparsers.add_parser('bin_inspect', help='validar e exibir os metadados do binário (ASRPROD)')
+    parser_bin_inspect.add_argument('arquivo', type=Path)
+    parser_bin_extrair = subparsers.add_parser('bin_extrair',
+                                               help='extrair o conteúdo gravável ou o pacote OTA original')
+    parser_bin_extrair.add_argument('arquivo', type=Path)
+    parser_bin_extrair.add_argument('saida', type=Path)
+    parser_bin_empacotar = subparsers.add_parser('bin_empacotar', help='acrescentar os metadados aos binários do build')
+    parser_bin_empacotar.add_argument('arquivo', type=Path)
+    parser_bin_empacotar.add_argument('saida', type=Path)
+    for campo in ('versao', 'variante', 'tipo', 'origem', 'aplicacao'):
+        parser_bin_empacotar.add_argument(campo, type=arg_int)
 
     parser_escrever_otp = subparsers.add_parser(Comandos.ESCREVER_OTP.value,
                                                 help='escrever em uma area da opt da flash')
@@ -328,6 +366,11 @@ def cli_build_parser():
     parser_escrever_otp.add_argument(Argumentos.DATA.value, help='dado a ser escrito na flash (hexadecimal)')
 
     parser_ler_otp = subparsers.add_parser(Comandos.LER_OTP.value, help='ler a area da otp da flash')
+    subparsers.add_parser(Comandos.DIAGNOSTICAR_OTP.value, help='listar faixas candidatas por leitura da OTP')
+    parser_diagnosticar_flash = subparsers.add_parser(Comandos.DIAGNOSTICAR_FLASH_ASR.value,
+                                                      help='sondar a flash no limite de 128 KiB')
+    parser_diagnosticar_flash.add_argument('--testar-escrita', metavar='SERIAL_HEX',
+                                           help='ensaiar escrita na flash de uma unidade de bancada')
     parser_ler_otp.add_argument(Argumentos.ADDRESS.value, help='endereco flash otp', type=arg_int)
     parser_ler_otp.add_argument(Argumentos.SIZE.value, help='endereco flash otp', type=arg_int)
 
@@ -353,10 +396,15 @@ def cli_build_parser():
         parser_mapa.add_argument(Argumentos.OUTPUT.value, nargs='?', help='arquivo binario opcional para salvar o dump')
         parser_mapa.add_argument('--mcu', choices=('cb', 'se'),
                                  help='modelo conhecido; evita a identificacao por apagamento da EEPROM')
+        if comando == Comandos.MAPA_EEPROM.value:
+            parser_mapa.add_argument('--eeprom-ab', action='store_true',
+                                     help='ler as duas páginas da EEPROM do PR439v3 (exige --mcu)')
     parser_mapa_memoria = subparsers.add_parser(Comandos.MAPA_MEMORIA.value,
-                                                 help='mostrar o mapa completo de memoria do MCU conectado')
+                                                help='mostrar o mapa completo de memoria do MCU conectado')
     parser_mapa_memoria.add_argument('--mcu', choices=('cb', 'se'),
-                                      help='modelo conhecido; evita a identificacao por apagamento da EEPROM')
+                                     help='modelo conhecido; evita a identificacao por apagamento da EEPROM')
+    parser_mapa_memoria.add_argument('--eeprom-ab', action='store_true',
+                                     help='mostrar as duas páginas da EEPROM do PR439v3 (exige --mcu)')
     parser_comdiag = subparsers.add_parser(Comandos.COMDIAG.value,
                                            help='mostra diagnostico do ambiente e portas seriais')
     parser_comdiag.add_argument('--json', dest=Argumentos.JSON.value, action='store_true',
@@ -459,22 +507,6 @@ def cli_build_parser():
     parser_firmware_inspect.add_argument('--json', dest=Argumentos.JSON.value, action='store_true',
                                          help='imprime inspecao em JSON')
 
-    parser_ota_assinado = subparsers.add_parser(Comandos.OTA_ASSINADO.value,
-                                                help='gera pacote OTA assinado com trailer de autenticacao')
-    parser_ota_assinado.add_argument(Argumentos.FIRMWARE.value, help='arquivo .bin de firmware sem header OTA')
-    parser_ota_assinado.add_argument(Argumentos.OUTPUT.value, nargs='?',
-                                     help='arquivo de saida (padrao: <firmware>_ota_assinado.bin)')
-    parser_ota_assinado.add_argument('--firmware-version', dest=Argumentos.FIRMWARE_VERSION.value, type=arg_int,
-                                     default=1, help='versao numerica do firmware usada na autenticacao')
-    parser_ota_assinado.add_argument('--key-header', dest=Argumentos.KEY_HEADER.value,
-                                     help='header C com BOOT_SECURITY_KEY_BYTES')
-
-    parser_ota_assinado_verify = subparsers.add_parser(Comandos.OTA_ASSINADO_VERIFY.value,
-                                                       help='verifica um pacote OTA assinado com trailer de autenticacao')
-    parser_ota_assinado_verify.add_argument(Argumentos.INPUT.value, help='arquivo OTA assinado para verificacao')
-    parser_ota_assinado_verify.add_argument('--key-header', dest=Argumentos.KEY_HEADER.value,
-                                            help='header C com BOOT_SECURITY_KEY_BYTES')
-
     parser_ota_cript = subparsers.add_parser(
         Comandos.OTA_CRIPT.value,
         help='gera pacote OTA criptografado com trailer v2',
@@ -542,21 +574,39 @@ def main(argv=None):
         if args.command == Comandos.FIRMWARE_INSPECT.value:
             relatorio = asr_firmware_inspect(args)
             return 1 if relatorio['errors'] else 0
-        if args.command == Comandos.OTA_ASSINADO.value:
-            asr_ota_assinado(args)
-            print('Pacote OTA assinado gerado com sucesso')
-            return 0
-        if args.command == Comandos.OTA_ASSINADO_VERIFY.value:
-            asr_ota_assinado_verify(args)
-            print('Pacote OTA assinado verificado com sucesso')
-            return 0
         if args.command == Comandos.OTA_CRIPT.value:
             asr_ota_cript(args)
             print('Pacote OTA criptografado gerado com sucesso')
             return 0
         if args.command == Comandos.OTA_CRIPT_VERIFY.value:
-            asr_ota_ota_verify(args)
+            asr_ota_cript_verify(args)
             print('Pacote OTA validado com sucesso')
+            return 0
+
+        if args.command == 'bin_empacotar':
+            dados, metadados = separar_rodape(args.arquivo.read_bytes())
+            if metadados is not None:
+                raise ValueError('O binário já possui metadados ASRPROD')
+            args.saida.write_bytes(acrescentar_rodape(dados, args.versao, args.variante,
+                                                      args.tipo, args.origem, args.aplicacao))
+            return 0
+        if args.command in ('bin_inspect', 'bin_extrair'):
+            dados, metadados = separar_rodape(args.arquivo.read_bytes())
+            if args.command == 'bin_extrair':
+                args.saida.write_bytes(dados)
+            elif metadados is None:
+                raise ValueError('Binário sem metadados ASRPROD')
+            else:
+                print(formatar_tabela_rodape(metadados, len(dados)))
+            return 0
+
+        if args.command == 'producao_inspect':
+            imagem, versao = ler_binario_producao(args.arquivo, args.mcu)
+            print(f'Produção PR439v3 válida. Firmware {versao}, {args.mcu}, {len(imagem)} bytes graváveis.')
+            return 0
+
+        if args.command == 'otp_producao_inspect':
+            mostrar_previa_otp_producao(args.arquivo, args.mcu, args.exibir_chave)
             return 0
 
         if args.boot_reset_delay < 0 or args.boot_release_delay < 0:
@@ -577,7 +627,11 @@ def main(argv=None):
         )
         config.log('command=%s argv=%s baud=%d timeout=%s portas=%s' % (
             args.command,
-            argv if argv is not None else sys.argv[1:],
+            '[omitido]' if (
+                    args.command == Comandos.ESCREVER_OTP.value or getattr(args, 'producao', None) or getattr(args,
+                                                                                                              'producao_bin',
+                                                                                                              False))
+            else (argv if argv is not None else sys.argv[1:]),
             args.baud,
             args.timeout,
             ','.join(config.portas_disponiveis),
@@ -604,6 +658,10 @@ def main(argv=None):
         elif args.command == Comandos.ESCREVER_OTP.value:
             asr_escrever_otp(args, asr_mcu, config)
             print('Escrita na OTP com sucesso')
+        elif args.command == Comandos.DIAGNOSTICAR_OTP.value:
+            diagnosticar_otp(args, asr_mcu)
+        elif args.command == Comandos.DIAGNOSTICAR_FLASH_ASR.value:
+            diagnosticar_flash_asr(args, asr_mcu)
         elif args.command == Comandos.LER_OTP.value:
             data = asr_ler_otp(args, asr_mcu, config)
             print('OTP data: %s' % binascii.hexlify(data))

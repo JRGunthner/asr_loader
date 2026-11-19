@@ -7,6 +7,8 @@ from typing import cast
 
 from .constantes import ASR_APP_FLASH_END, ASR_APP_FLASH_START, ARM_SRAM_END, ARM_SRAM_START, OTA_MAGIC
 
+from .rodape_bin import separar_rodape
+
 SNAPSHOT_PROFILES = {
     'asr6601': {
         'description': 'Snapshot basico da vector table da aplicacao ASR6601',
@@ -138,16 +140,18 @@ def analisar_firmware(caminho, base_address=ASR_APP_FLASH_START) -> dict:
     caminho_firmware = pathlib.Path(caminho)
     if not caminho_firmware.is_file():
         raise FileNotFoundError('ERROR: arquivo nao encontrado: %s' % caminho_firmware)
-    return analisar_firmware_bytes(
-        caminho_firmware.read_bytes(),
-        caminho=caminho_firmware,
-        base_address=base_address,
-    )
+    dados, metadados = separar_rodape(caminho_firmware.read_bytes())
+    relatorio = analisar_firmware_bytes(dados, caminho=caminho_firmware, base_address=base_address)
+    if metadados is not None:
+        relatorio['versao_firmware'] = metadados['versao']
+    return relatorio
 
 
 def imprimir_relatorio_firmware(relatorio):
     print('Firmware : %s' % relatorio['path'])
     print('Formato  : %s' % relatorio['format'])
+    if 'versao_firmware' in relatorio:
+        print('Versão   : %d' % relatorio['versao_firmware'])
     print('Tamanho  : %d bytes (0x%X)' % (relatorio['size'], relatorio['size']))
     print('CRC32    : 0x%08X' % relatorio['crc32'])
     for aviso in relatorio['warnings']:
@@ -192,7 +196,14 @@ def montar_prevalidar_flash(addr_file, strict_app_range=False) -> dict:
             erros.append('falha na leitura do arquivo: %s' % caminho)
             continue
 
-        dados = caminho.read_bytes()
+        try:
+            dados, metadados = separar_rodape(caminho.read_bytes())
+            if metadados is not None and endereco != metadados['origem']:
+                raise ValueError('Endereço de gravação diverge dos metadados')
+        except (OSError, ValueError) as erro:
+            erros.append(f'{caminho}: {erro}')
+            continue
+
         tamanho = len(dados)
         fim = endereco + tamanho
         fora_app = not (ASR_APP_FLASH_START <= endereco < ASR_APP_FLASH_END and fim <= ASR_APP_FLASH_END)
