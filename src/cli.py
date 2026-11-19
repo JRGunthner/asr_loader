@@ -404,6 +404,8 @@ def cli_build_parser():
                                      help='ler as duas páginas da EEPROM do ASR6601SE (exige --mcu se)')
             modo_eeprom.add_argument('--eeprom-ativa', action='store_true',
                                      help='exportar uma página bruta, escolhida pelo cabeçalho (exige --mcu se)')
+            modo_eeprom.add_argument('--eeprom-backup', action='store_true',
+                                     help='exportar a outra página da EEPROM (exige --mcu se)')
     parser_mapa_memoria = subparsers.add_parser(Comandos.MAPA_MEMORIA.value,
                                                 help='mostrar o mapa completo de memoria do MCU conectado')
     parser_mapa_memoria.add_argument('--mcu', choices=('cb', 'se'),

@@ -12,6 +12,7 @@
 - Adição de `flash --somente-validar` e `diagnosticar_otp` para conferir a OTP sem gravá-la. O comando `diagnosticar_flash_asr` sonda a flash e oferece um ensaio de escrita opcional para unidades de bancada.
 - Adição de testes simulados para validação do binário, interrupções no provisionamento, preservação do quadro OTP e gravação somente dos bytes da imagem. O Makefile do firmware PR439v3 oferece `make validar_bin BIN=arquivo.bin` para inspeção offline.
 - Adição do comando `otp_producao_inspect` para exibir a tabela de campos e os 96 bytes do quadro OTP em hexadecimal, sem acessar a placa. A chave de fabricação é ocultada por padrão e pode ser exibida com `--exibir-chave`.
+- Adição de `mapa_eeprom --eeprom-backup` e `make mapa_eeprom backup` para exportar a página de backup do ASR6601SE em um dump separado de 4 KiB.
 
 ## v1.4 - 2026-08-10
 - `hw_reset` agora força estado inicial conhecido (`DTR=0`, `RTS=0`) antes de pulsar reset, reduzindo falhas por estado indefinido das linhas ao abrir a porta serial.

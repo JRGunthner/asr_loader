@@ -213,10 +213,12 @@ def asr_obter_mapa_memoria(variante, v8=False, eeprom_ab=False):
 def asr_mapa_memoria(param, processador, config, espaco=None, ler_bytes=False):
     """Mostra ou le um espaco de memoria para o MCU conectado."""
     mcu_informado: str | None = getattr(param, 'mcu', None)
-    if getattr(param, 'eeprom_ativa', False):
+    eeprom_backup = getattr(param, 'eeprom_backup', False)
+    if eeprom_backup or getattr(param, 'eeprom_ativa', False):
         if mcu_informado != 'se':
-            raise CmdExcessao('--eeprom-ativa exige --mcu se (ASR6601SE)')
-        return _asr_mapa_eeprom_ativa(param, processador, config)
+            opcao = '--eeprom-backup' if eeprom_backup else '--eeprom-ativa'
+            raise CmdExcessao(f'{opcao} exige --mcu se (ASR6601SE)')
+        return _asr_mapa_eeprom_pagina(param, processador, config, eeprom_backup)
 
     eeprom_ab = getattr(param, 'eeprom_ab', False)
     if eeprom_ab and mcu_informado != 'se':
@@ -261,7 +263,7 @@ def asr_mapa_memoria(param, processador, config, espaco=None, ler_bytes=False):
     return mapa
 
 
-def _asr_mapa_eeprom_ativa(param, processador, config):
+def _asr_mapa_eeprom_pagina(param, processador, config, backup):
     if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return b''
 
@@ -294,7 +296,14 @@ def _asr_mapa_eeprom_ativa(param, processador, config):
         _, endereco, pagina = (com_dados or paginas)[-1]
         criterio = 'sem geração identificável, seleção pela área bruta'
 
-    saida = pathlib.Path(param.output or 'mapas_memoria/mapa_eeprom.bin')
+    if backup:
+        endereco_ativo = endereco
+        geracao, endereco, pagina = paginas[1] if endereco_ativo == paginas[0][1] else paginas[0]
+        geracao_backup = f'geração {geracao} indicada no cabeçalho' if geracao is not None else 'sem geração identificável'
+        criterio = f'backup da página selecionada em 0x{endereco_ativo:08X}, {geracao_backup}'
+
+    nome_dump = 'mapa_eeprom_backup.bin' if backup else 'mapa_eeprom.bin'
+    saida = pathlib.Path(param.output or f'mapas_memoria/{nome_dump}')
     saida = _salvar_mapa_eeprom(saida, pagina)
 
     print(f'EEPROM 0x{endereco:08X}–0x{endereco + EEPROM_SIZE - 1:08X}, {criterio}')

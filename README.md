@@ -1579,6 +1579,18 @@ e a leitura dispensa chave. Se o destino estiver bloqueado, o dump anterior
 é preservado e o novo é salvo com um sufixo exclusivo na mesma pasta.
 O caminho efetivamente usado aparece em `Dump salvo em`.
 
+Para exportar a página de backup, use `make mapa_eeprom backup` no PR439v3,
+ou chame o gravador diretamente:
+
+```powershell
+python asr_loader.py -p COM9 mapa_eeprom --eeprom-backup --mcu se
+```
+
+O comando usa o mesmo critério para escolher a página ativa e exporta a outra
+página para `mapas_memoria/mapa_eeprom_backup.bin`. O dump tem 4 KiB,
+mesmo quando a página está apagada. O gravador mostra o endereço escolhido
+e a geração indicada pelo cabeçalho, quando disponível.
+
 ### Firmware v8: --v8
 
 Usa o mapeamento do firmware v8: somente o ultimo KiB da area de EEPROM

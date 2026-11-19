@@ -467,9 +467,21 @@ class TestesDaLogicaDosComandos(unittest.TestCase):
                     endereco_escolhido = 0x0803E000 + 4096 * indice
                     self.assertIn(f'EEPROM 0x{endereco_escolhido:08X}', console.getvalue())
                     self.assertIn(criterio, console.getvalue())
-                self.assertEqual(processador.leituras_de_registradores, list(enderecos))
+
+                    arquivo_backup = arquivo.with_name('backup.bin')
+                    parametros = SimpleNamespace(baud=921600, mcu='se', eeprom_backup=True, output=arquivo_backup)
+                    with contextlib.redirect_stdout(io.StringIO()) as console:
+                        resultado = asr_mapa_memoria(parametros, processador, configuracao)
+                    esperado_backup = (primeira, segunda)[1 - indice]
+                    self.assertEqual(resultado, esperado_backup)
+                    self.assertEqual(arquivo_backup.read_bytes(), esperado_backup)
+                    self.assertEqual(arquivo.read_bytes(), esperado)
+                    endereco_backup = 0x0803E000 + 4096 * (1 - indice)
+                    self.assertIn(f'EEPROM 0x{endereco_backup:08X}', console.getvalue())
+                    self.assertIn(f'backup da página selecionada em 0x{endereco_escolhido:08X}', console.getvalue())
+                self.assertEqual(processador.leituras_de_registradores, list(enderecos) * 2)
                 self.assertEqual(processador.chamadas_de_apagamento, [])
-                self.assertEqual(processador.modos_de_reset_software, [0])
+                self.assertEqual(processador.modos_de_reset_software, [0, 0])
 
     @unittest.skipUnless(os.name == 'nt', 'Bloqueio de arquivo mapeado no Windows')
     def test_mapa_eeprom_preserva_dump_aberto_no_visualizador(self):
