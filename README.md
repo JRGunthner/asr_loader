@@ -1591,6 +1591,18 @@ página para `mapas_memoria/mapa_eeprom_backup.bin`. O dump tem 4 KiB,
 mesmo quando a página está apagada. O gravador mostra o endereço escolhido
 e a geração indicada pelo cabeçalho, quando disponível.
 
+Para ler a página cifrada HDE3 do PR439v3 e imprimir os registros em claro:
+
+```powershell
+$env:ASR_ARQUIVO_CHAVE_EEPROM = Read-Host 'Caminho do arquivo da chave da EEPROM'
+python asr_loader.py -p COM9 mapa_eeprom --mcu se --descriptografar
+```
+
+O gravador seleciona a página pelo critério descrito acima e verifica a
+autenticação AES-SIV antes de imprimir o mapa. Use `--eeprom-backup` para
+selecionar a outra página. Informe um caminho de saída posicional para também
+salvar os bytes descriptografados dos registros em um arquivo.
+
 ### Firmware v8: --v8
 
 Usa o mapeamento do firmware v8: somente o ultimo KiB da area de EEPROM

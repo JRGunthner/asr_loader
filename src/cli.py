@@ -399,6 +399,8 @@ def cli_build_parser():
         parser_mapa.add_argument('--mcu', choices=('cb', 'se'),
                                  help='modelo conhecido; evita a identificacao por apagamento da EEPROM')
         if comando == Comandos.MAPA_EEPROM.value:
+            parser_mapa.add_argument('--descriptografar', action='store_true',
+                                     help='autenticar e exibir os dados HDE3 em claro (exige --mcu se)')
             modo_eeprom = parser_mapa.add_mutually_exclusive_group()
             modo_eeprom.add_argument('--eeprom-ab', action='store_true',
                                      help='ler as duas páginas da EEPROM do ASR6601SE (exige --mcu se)')

@@ -32,7 +32,7 @@ from .diagnosticos import (
     parse_csv_ints,
 )
 from .exceptions import CmdExcessao
-from .producao import gravar_producao, inspecionar_otp_para_gravacao
+from .producao import _ler_chave_producao, gravar_producao, inspecionar_otp_para_gravacao
 from .rodape_bin import separar_rodape
 from .ota_comum import (
     append_ota_tche_sufixo,
@@ -214,6 +214,11 @@ def asr_mapa_memoria(param, processador, config, espaco=None, ler_bytes=False):
     """Mostra ou le um espaco de memoria para o MCU conectado."""
     mcu_informado: str | None = getattr(param, 'mcu', None)
     eeprom_backup = getattr(param, 'eeprom_backup', False)
+    if getattr(param, 'descriptografar', False):
+        if mcu_informado != 'se' or getattr(param, 'eeprom_ab', False) or getattr(config, 'v8', False):
+            raise CmdExcessao('--descriptografar exige --mcu se e é incompatível com --eeprom-ab e --v8')
+        return _asr_mapa_eeprom_pagina(param, processador, config, eeprom_backup, _ler_chave_producao())
+
     if eeprom_backup or getattr(param, 'eeprom_ativa', False):
         if mcu_informado != 'se':
             opcao = '--eeprom-backup' if eeprom_backup else '--eeprom-ativa'
@@ -263,7 +268,7 @@ def asr_mapa_memoria(param, processador, config, espaco=None, ler_bytes=False):
     return mapa
 
 
-def _asr_mapa_eeprom_pagina(param, processador, config, backup):
+def _asr_mapa_eeprom_pagina(param, processador, config, backup, chave=None):
     if not asr_conectar(processador, config.portas_disponiveis, param.baud):
         return b''
 
@@ -302,15 +307,39 @@ def _asr_mapa_eeprom_pagina(param, processador, config, backup):
         geracao_backup = f'geração {geracao} indicada no cabeçalho' if geracao is not None else 'sem geração identificável'
         criterio = f'backup da página selecionada em 0x{endereco_ativo:08X}, {geracao_backup}'
 
-    nome_dump = 'mapa_eeprom_backup.bin' if backup else 'mapa_eeprom.bin'
-    saida = pathlib.Path(param.output or f'mapas_memoria/{nome_dump}')
-    saida = _salvar_mapa_eeprom(saida, pagina)
+    saida = None
+    if chave is not None:
+        pagina = _descriptografar_pagina_eeprom(pagina, chave)
+        criterio += ', dados autenticados e descriptografados'
+        if param.output:
+            saida = _salvar_mapa_eeprom(pathlib.Path(param.output), pagina)
+    else:
+        nome_dump = 'mapa_eeprom_backup.bin' if backup else 'mapa_eeprom.bin'
+        saida = _salvar_mapa_eeprom(pathlib.Path(param.output or f'mapas_memoria/{nome_dump}'), pagina)
 
-    print(f'EEPROM 0x{endereco:08X}–0x{endereco + EEPROM_SIZE - 1:08X}, {criterio}')
-    for offset in range(0, EEPROM_SIZE, 16):
+    print(f'EEPROM 0x{endereco:08X}–0x{endereco + len(pagina) - 1:08X}, {criterio}')
+    for offset in range(0, len(pagina), 16):
         print(asr_formatar_hexdump(endereco + offset, pagina[offset:offset + 16]))
-    print(f'Dump salvo em: {saida} ({EEPROM_SIZE} bytes)')
+    if saida is not None:
+        print(f'Dump salvo em: {saida} ({len(pagina)} bytes)')
     return pagina
+
+
+def _descriptografar_pagina_eeprom(pagina, chave):
+    from cryptography.exceptions import InvalidTag
+    from cryptography.hazmat.primitives.ciphers.aead import AESSIV
+
+    autenticador = pagina[-32:-16]
+    cabecalho = pagina[-16:]
+    geracao, complemento, tamanho, formato = struct.unpack('<4I', cabecalho)
+    if formato != 0x48444533:
+        raise CmdExcessao('A página selecionada não está no formato cifrado HDE3')
+    if complemento != (geracao ^ 0xFFFFFFFF) or not 0 < tamanho <= len(pagina) - 32:
+        raise CmdExcessao('Cabeçalho HDE3 inválido')
+    try:
+        return AESSIV(chave).decrypt(autenticador + pagina[:tamanho], [cabecalho])
+    except InvalidTag:
+        raise CmdExcessao('Falha na autenticação da EEPROM: chave incorreta ou página alterada') from None
 
 
 def _salvar_mapa_eeprom(saida, pagina):
@@ -431,7 +460,8 @@ def _gravar_arquivos_flash(arquivos, processador, config, reserva_eeprom):
                 processador.erase(inicio_eeprom, tamanho_eeprom)
                 processador.verify(inicio_eeprom, tamanho_eeprom, binascii.crc32(b'\xFF' * tamanho_eeprom))
             except Exception as falha:
-                raise CmdExcessao(f'Falha ao apagar ou verificar a EEPROM ({tamanho_eeprom} bytes) — {falha}') from falha
+                raise CmdExcessao(
+                    f'Falha ao apagar ou verificar a EEPROM ({tamanho_eeprom} bytes) — {falha}') from falha
             print(f'EEPROM apagada e verificada')
         else:
             asr_apagar_eeprom(processador, mostrar_erros=False, v8=getattr(config, 'v8', False))
