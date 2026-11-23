@@ -1571,11 +1571,13 @@ python asr_loader.py -p COM9 mapa_eeprom --eeprom-ab --mcu se
 ```
 
 Para exportar uma página bruta do PR439v3, use `mapa_eeprom --eeprom-ativa --mcu se`.
-O gravador lê as duas páginas e salva 4096 bytes da página com maior geração
-indicada nos cabeçalhos reconhecidos. Na ausência de geração, escolhe a página
-com dados ou, em caso de empate, a última página física. O console mostra o
-endereço e o critério de seleção. As páginas são exportadas como estão na flash,
-e a leitura dispensa chave. Se o destino estiver bloqueado, o dump anterior
+O gravador lê as páginas físicas em `0x0803E000` e `0x0803F000`. Entre páginas HDE1
+publicadas com cabeçalho coerente, seleciona a maior geração e, em caso de
+empate, o menor endereço. Sem cabeçalho coerente, seleciona pela área bruta.
+Prefere uma página com dados e, em caso de empate, o maior endereço.
+O console mostra o endereço e o critério. O dump bruto contém os 4096 bytes
+da página, inclusive se estiver apagada ou inválida, e dispensa chave.
+Se o destino estiver bloqueado, o dump anterior
 é preservado e o novo é salvo com um sufixo exclusivo na mesma pasta.
 O caminho efetivamente usado aparece em `Dump salvo em`.
 
@@ -1591,17 +1593,21 @@ página para `mapas_memoria/mapa_eeprom_backup.bin`. O dump tem 4 KiB,
 mesmo quando a página está apagada. O gravador mostra o endereço escolhido
 e a geração indicada pelo cabeçalho, quando disponível.
 
-Para ler a página cifrada HDE3 do PR439v3 e imprimir os registros em claro:
+Para ler a página cifrada HDE1 (layout 1) do PR439v3 e imprimir os registros em claro:
 
 ```powershell
 $env:ASR_ARQUIVO_CHAVE_EEPROM = Read-Host 'Caminho do arquivo da chave da EEPROM'
 python asr_loader.py -p COM9 mapa_eeprom --mcu se --descriptografar
 ```
 
-O gravador seleciona a página pelo critério descrito acima e verifica a
-autenticação AES-SIV antes de imprimir o mapa. Use `--eeprom-backup` para
-selecionar a outra página. Informe um caminho de saída posicional para também
-salvar os bytes descriptografados dos registros em um arquivo.
+O arquivo indicado por `ASR_ARQUIVO_CHAVE_EEPROM` contém a chave de 32 bytes
+em 64 dígitos hexadecimais. Antes de exibir os registros, o gravador valida
+a versão, o tamanho (1 a 4064 bytes), o complemento da geração e a publicação
+(`A5 FF FF FF` no final da página). A autenticação AES-SIV usa como um único
+componente de dados associados os bytes de `0xFE0` a `0xFE3` seguidos dos bytes
+de `0xFF4` a `0xFFF`. Em caso de falha, o comando encerra com erro.
+Use `--eeprom-backup` para selecionar a outra página física. Informe um caminho
+de saída posicional para salvar os registros autenticados em um arquivo.
 
 ### Firmware v8: --v8
 

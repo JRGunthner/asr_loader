@@ -118,8 +118,7 @@ def asr_firmware_inspect(param):
 
 
 def asr_erase(param, processador, config):
-    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
-        return
+    asr_conectar(processador, config.portas_disponiveis, param.baud)
     processador.erase(param.address, param.size)
     processador.sw_reset(0)
 
@@ -166,8 +165,7 @@ def asr_apagar_eeprom(processador, mostrar_erros=True, mostrar_identificacao=Tru
 
 def asr_identificar_mcu(param, processador, config):
     """Identifica o MCU pelo mesmo teste de mapeamento usado no flash."""
-    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
-        return None
+    asr_conectar(processador, config.portas_disponiveis, param.baud)
 
     variante = asr_apagar_eeprom(
         processador,
@@ -232,8 +230,7 @@ def asr_mapa_memoria(param, processador, config, espaco=None, ler_bytes=False):
     if mcu_informado:
         variantes = {'cb': 'ASR6601CB', 'se': 'ASR6601SE'}
         variante = variantes[mcu_informado]
-        if not asr_conectar(processador, config.portas_disponiveis, param.baud):
-            return b'' if ler_bytes else ()
+        asr_conectar(processador, config.portas_disponiveis, param.baud)
         print('MCU selecionado: %s' % variante)
     else:
         variante = asr_identificar_mcu(param, processador, config)
@@ -269,8 +266,7 @@ def asr_mapa_memoria(param, processador, config, espaco=None, ler_bytes=False):
 
 
 def _asr_mapa_eeprom_pagina(param, processador, config, backup, chave=None):
-    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
-        return b''
+    asr_conectar(processador, config.portas_disponiveis, param.baud)
 
     paginas = []
     processador.sessao_reservada = True
@@ -280,11 +276,9 @@ def _asr_mapa_eeprom_pagina(param, processador, config, backup, chave=None):
                 struct.pack('<I', processador.ler_reg(posicao)[0])
                 for posicao in range(endereco, endereco + EEPROM_SIZE, 4)
             )
-            geracao, campo1, campo2, formato = struct.unpack_from('<4I', pagina, EEPROM_SIZE - 16)
-            # O complemento ocupa campos diferentes nos formatos legado (HDE2) e cifrado (HDE3).
-            complemento = {0x48444532: campo2, 0x48444533: campo1}.get(formato)
-            geracao_identificada = geracao if complemento == (geracao ^ 0xFFFFFFFF) else None
-            paginas.append((geracao_identificada, endereco, pagina))
+            cabecalho = _ler_cabecalho_hde1(pagina)
+            geracao = cabecalho[0] if cabecalho is not None else None
+            paginas.append((geracao, endereco, pagina))
     finally:
         try:
             processador.sw_reset(0)
@@ -293,7 +287,7 @@ def _asr_mapa_eeprom_pagina(param, processador, config, backup, chave=None):
 
     com_geracao = [candidata for candidata in paginas if candidata[0] is not None]
     if com_geracao:
-        geracao, endereco, pagina = max(com_geracao, key=lambda candidata: candidata[0])
+        geracao, endereco, pagina = max(com_geracao, key=lambda candidata: (candidata[0], -candidata[1]))
         criterio = f'geração {geracao} indicada no cabeçalho'
     else:
         apagada = b'\xFF' * EEPROM_SIZE
@@ -306,16 +300,18 @@ def _asr_mapa_eeprom_pagina(param, processador, config, backup, chave=None):
         geracao, endereco, pagina = paginas[1] if endereco_ativo == paginas[0][1] else paginas[0]
         geracao_backup = f'geração {geracao} indicada no cabeçalho' if geracao is not None else 'sem geração identificável'
         criterio = f'backup da página selecionada em 0x{endereco_ativo:08X}, {geracao_backup}'
+        if not com_geracao:
+            criterio += ', seleção pela área bruta'
 
     saida = None
     if chave is not None:
         pagina = _descriptografar_pagina_eeprom(pagina, chave)
         criterio += ', dados autenticados e descriptografados'
         if param.output:
-            saida = _salvar_mapa_eeprom(pathlib.Path(param.output), pagina)
+            saida = salvar_mapa_eeprom(pathlib.Path(param.output), pagina)
     else:
         nome_dump = 'mapa_eeprom_backup.bin' if backup else 'mapa_eeprom.bin'
-        saida = _salvar_mapa_eeprom(pathlib.Path(param.output or f'mapas_memoria/{nome_dump}'), pagina)
+        saida = salvar_mapa_eeprom(pathlib.Path(param.output or f'mapas_memoria/{nome_dump}'), pagina)
 
     print(f'EEPROM 0x{endereco:08X}–0x{endereco + len(pagina) - 1:08X}, {criterio}')
     for offset in range(0, len(pagina), 16):
@@ -325,24 +321,32 @@ def _asr_mapa_eeprom_pagina(param, processador, config, backup, chave=None):
     return pagina
 
 
+def _ler_cabecalho_hde1(pagina):
+    if len(pagina) != EEPROM_SIZE or pagina[0xFFC:] != b'\xA5\xFF\xFF\xFF':
+        return None
+    versao, tamanho = struct.unpack_from('<HH', pagina, 0xFE0)
+    geracao, complemento = struct.unpack_from('<II', pagina, 0xFF4)
+    if versao != 1 or not 1 <= tamanho <= 0xFE0 or complemento != (geracao ^ 0xFFFFFFFF):
+        return None
+    return geracao, tamanho
+
+
 def _descriptografar_pagina_eeprom(pagina, chave):
     from cryptography.exceptions import InvalidTag
     from cryptography.hazmat.primitives.ciphers.aead import AESSIV
 
-    autenticador = pagina[-32:-16]
-    cabecalho = pagina[-16:]
-    geracao, complemento, tamanho, formato = struct.unpack('<4I', cabecalho)
-    if formato != 0x48444533:
-        raise CmdExcessao('A página selecionada não está no formato cifrado HDE3')
-    if complemento != (geracao ^ 0xFFFFFFFF) or not 0 < tamanho <= len(pagina) - 32:
-        raise CmdExcessao('Cabeçalho HDE3 inválido')
+    cabecalho = _ler_cabecalho_hde1(pagina)
+    if cabecalho is None:
+        raise CmdExcessao('Cabeçalho HDE1 inválido ou página ainda sem publicação')
+    _, tamanho = cabecalho
+    dados_associados = pagina[0xFE0:0xFE4] + pagina[0xFF4:0x1000]
     try:
-        return AESSIV(chave).decrypt(autenticador + pagina[:tamanho], [cabecalho])
+        return AESSIV(chave).decrypt(pagina[0xFE4:0xFF4] + pagina[:tamanho], [dados_associados])
     except InvalidTag:
         raise CmdExcessao('Falha na autenticação da EEPROM: chave incorreta ou página alterada') from None
 
 
-def _salvar_mapa_eeprom(saida, pagina):
+def salvar_mapa_eeprom(saida, pagina):
     """Salva a página completa e preserva o arquivo anterior se estiver bloqueado."""
     saida.parent.mkdir(parents=True, exist_ok=True)
     temporario = None
@@ -374,8 +378,7 @@ def asr_clean_eeprom(param, processador, config):
     _, endereco, _, tamanho = asr_obter_mapa_memoria(
         variante, v8=getattr(config, 'v8', False), eeprom_ab=variante == 'ASR6601SE'
     )[-1]
-    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
-        return
+    asr_conectar(processador, config.portas_disponiveis, param.baud)
     processador.erase(endereco, tamanho)
     processador.sw_reset(0)
 
@@ -438,8 +441,7 @@ def asr_flash(param, processador, config):
 
         arquivos.append((endereco, caminho, dados, item['crc32']))
 
-    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
-        return False
+    asr_conectar(processador, config.portas_disponiveis, param.baud)
 
     resumo_otp = inspecionar_otp_para_gravacao(processador, mcu) if relatar_otp else None
 
@@ -489,50 +491,42 @@ def _gravar_arquivos_flash(arquivos, processador, config, reserva_eeprom):
 
 
 def asr_escrever_otp(param, processador, config):
-    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
-        return
+    asr_conectar(processador, config.portas_disponiveis, param.baud)
     processador.escrever_otp(param.address, binascii.unhexlify(param.data))
 
 
 def asr_ler_otp(param, processador, config):
-    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
-        return b''
+    asr_conectar(processador, config.portas_disponiveis, param.baud)
     return processador.ler_otp(param.address, param.size)
 
 
 def asr_escrever_opt0(param, processador, config):
-    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
-        return
+    asr_conectar(processador, config.portas_disponiveis, param.baud)
     processador.escrever_opt0(param.opt0_l, param.opt0_h)
 
 
 def asr_ler_opt0(param, processador, config):
-    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
-        return 0, 0
+    asr_conectar(processador, config.portas_disponiveis, param.baud)
     return processador.ler_opt0()
 
 
 def asr_escrever_opt1(param, processador, config):
-    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
-        return
+    asr_conectar(processador, config.portas_disponiveis, param.baud)
     processador.escrever_opt1(param.opt1_l, param.opt1_h)
 
 
 def asr_ler_opt1(param, processador, config):
-    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
-        return 0, 0
+    asr_conectar(processador, config.portas_disponiveis, param.baud)
     return processador.ler_opt1()
 
 
 def asr_serial_asr(param, processador, config):
-    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
-        return b''
+    asr_conectar(processador, config.portas_disponiveis, param.baud)
     return processador.serial_asr()
 
 
 def asr_sw_reset(param, processador, config):
-    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
-        return b''
+    asr_conectar(processador, config.portas_disponiveis, param.baud)
     return processador.sw_reset(0)
 
 
@@ -661,8 +655,7 @@ def asr_verify(param, processador, config):
     imagem, metadados = separar_rodape(pathlib.Path(param.filename).read_bytes())
     if metadados is not None and metadados['origem'] != param.address:
         raise CmdExcessao('Endereço de verificação diverge dos metadados')
-    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
-        return
+    asr_conectar(processador, config.portas_disponiveis, param.baud)
 
     image_checksum = binascii.crc32(imagem)
     image_size = len(imagem)
@@ -672,14 +665,12 @@ def asr_verify(param, processador, config):
 
 
 def asr_versao_bootloader(param, processador, config):
-    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
-        return (0,)
+    asr_conectar(processador, config.portas_disponiveis, param.baud)
     return processador.versao_bootloader()
 
 
 def asr_ler_reg(param, processador, config):
-    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
-        return (0,)
+    asr_conectar(processador, config.portas_disponiveis, param.baud)
     return processador.ler_reg(param.address)
 
 
@@ -760,8 +751,7 @@ def asr_ler_mem(param, processador, config):
     if param.size <= 0:
         raise Exception('ERROR: o tamanho deve ser maior que zero')
 
-    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
-        return b''
+    asr_conectar(processador, config.portas_disponiveis, param.baud)
 
     return _asr_ler_mem(processador, param.address, param.size, getattr(param, 'output', None))
 
@@ -779,7 +769,8 @@ def _asr_ler_mem(processador, endereco_inicial, tamanho, output=None):
         print('Lendo memoria: %d bytes a partir de %s' % (tamanho, hex(endereco_inicial)))
         if output:
             pathlib.Path(output).parent.mkdir(parents=True, exist_ok=True)
-        with (open(output, 'wb') if output else contextlib.nullcontext()) as arquivo:
+        with contextlib.ExitStack() as contexto:
+            arquivo = contexto.enter_context(open(output, 'wb')) if output else None
             for indice in range(quantidade_palavras):
                 endereco_atual = endereco_alinhado + (indice * 4)
                 palavra = struct.pack('<I', processador.ler_reg(endereco_atual)[0])
@@ -791,7 +782,7 @@ def _asr_ler_mem(processador, endereco_inicial, tamanho, output=None):
 
                 trecho = palavra[inicio - inicio_palavra:fim - inicio_palavra]
                 dados.extend(trecho)
-                if arquivo:
+                if arquivo is not None:
                     arquivo.write(trecho)
 
                 while trecho:
@@ -852,14 +843,12 @@ def asr_snapshot(param, processador, config):
 
 
 def asr_escrever_reg(param, processador, config):
-    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
-        return
+    asr_conectar(processador, config.portas_disponiveis, param.baud)
     processador.escrever_reg(param.address, param.value)
 
 
 def asr_jump(param, processador, config):
-    if not asr_conectar(processador, config.portas_disponiveis, param.baud):
-        return
+    asr_conectar(processador, config.portas_disponiveis, param.baud)
     processador.jump(param.address)
 
 

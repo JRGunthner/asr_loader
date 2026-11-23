@@ -7,9 +7,11 @@ import unittest
 import struct
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
+from cryptography.hazmat.primitives.ciphers.aead import AESSIV
 
 from src.comandos import (
-    _salvar_mapa_eeprom,
+    salvar_mapa_eeprom,
     asr_apagar_eeprom,
     asr_clean_eeprom,
     asr_conectar,
@@ -111,9 +113,9 @@ class ProcessadorSimulado:
 class TestesDaLogicaDosComandos(unittest.TestCase):
     def test_clear_eeprom_apaga_somente_a_faixa_do_mcu_informado(self):
         for variante, v8, endereco, tamanho in (
-            ('ASR6601CB', False, EEPROM_ENDERECO_ASR6601CB, EEPROM_SIZE),
-            ('ASR6601SE', False, EEPROM_ENDERECO_ASR6601SE - EEPROM_SIZE, 2 * EEPROM_SIZE),
-            ('ASR6601SE', True, EEPROM_ENDERECO_ASR6601SE - EEPROM_SIZE, 2 * EEPROM_SIZE),
+                ('ASR6601CB', False, EEPROM_ENDERECO_ASR6601CB, EEPROM_SIZE),
+                ('ASR6601SE', False, EEPROM_ENDERECO_ASR6601SE - EEPROM_SIZE, 2 * EEPROM_SIZE),
+                ('ASR6601SE', True, EEPROM_ENDERECO_ASR6601SE - EEPROM_SIZE, 2 * EEPROM_SIZE),
         ):
             with self.subTest(variante=variante, v8=v8):
                 processador = ProcessadorSimulado()
@@ -431,22 +433,29 @@ class TestesDaLogicaDosComandos(unittest.TestCase):
         apagada = b'\xFF' * 4096
         bruto_a = b'A' + apagada[1:]
         bruto_b = b'B' + apagada[1:]
-        cifrada = apagada[:-16] + struct.pack('<4I', 10, 10 ^ 0xFFFFFFFF, 549, 0x48444533)
-        legada = bruto_b[:-16] + struct.pack('<4I', 11, 0, 11 ^ 0xFFFFFFFF, 0x48444532)
-        incompleta = bruto_b[:-16] + struct.pack('<4I', 12, 0, 549, 0x48444533)
+
+        def montar_pagina(pg_bruta, geracao):
+            return (pg_bruta[:0xFE0] + struct.pack('<HH', 1, 549) + b'\x00' * 16
+                    + struct.pack('<III', geracao, geracao ^ 0xFFFFFFFF, 0xFFFFFFA5))
+
+        cifrada = montar_pagina(bruto_a, 10)
+        mais_nova = montar_pagina(bruto_b, 11)
+        incompleta = mais_nova[:0xFFC] + apagada[0xFFC:]
+        complemento_invalido = mais_nova[:0xFF8] + b'\0' * 4 + mais_nova[0xFFC:]
 
         for caso, primeira, segunda, indice, criterio in (
-            ('legada mais nova', cifrada, legada, 1, 'geração 11'),
-            ('maior geração na primeira', legada, cifrada, 0, 'geração 11'),
-            ('mesma geração', cifrada, cifrada, 0, 'geração 10'),
-            ('página cifrada sem autenticação', cifrada, apagada, 0, 'geração 10'),
-            ('complemento inválido', cifrada, incompleta, 0, 'geração 10'),
-            ('só primeira com dados', bruto_a, apagada, 0, 'sem geração identificável'),
-            ('só segunda com dados', apagada, bruto_b, 1, 'sem geração identificável'),
-            ('duas páginas sem cabeçalho', bruto_a, bruto_b, 1, 'sem geração identificável'),
-            ('duas páginas apagadas', apagada, apagada, 1, 'sem geração identificável'),
+                ('maior geração na segunda', cifrada, mais_nova, 1, 'geração 11'),
+                ('maior geração na primeira', mais_nova, cifrada, 0, 'geração 11'),
+                ('mesma geração', cifrada, montar_pagina(bruto_b, 10), 0, 'geração 10'),
+                ('página cifrada sem autenticação', cifrada, apagada, 0, 'geração 10'),
+                ('complemento inválido', cifrada, complemento_invalido, 0, 'geração 10'),
+                ('página sem publicação', cifrada, incompleta, 0, 'geração 10'),
+                ('só primeira com dados', bruto_a, apagada, 0, 'sem geração identificável'),
+                ('só segunda com dados', apagada, bruto_b, 1, 'sem geração identificável'),
+                ('duas páginas sem cabeçalho', bruto_a, bruto_b, 1, 'sem geração identificável'),
+                ('duas páginas apagadas', apagada, apagada, 1, 'sem geração identificável'),
         ):
-            with self.subTest(caso=caso):
+            with self.subTest(caso=caso), patch.dict(os.environ, {}, clear=True):
                 bruto = primeira + segunda
                 enderecos = range(0x0803E000, 0x08040000, 4)
                 processador = ProcessadorSimulado(valores_de_registradores={
@@ -467,6 +476,8 @@ class TestesDaLogicaDosComandos(unittest.TestCase):
                     endereco_escolhido = 0x0803E000 + 4096 * indice
                     self.assertIn(f'EEPROM 0x{endereco_escolhido:08X}', console.getvalue())
                     self.assertIn(criterio, console.getvalue())
+                    if criterio == 'sem geração identificável':
+                        self.assertIn('seleção pela área bruta', console.getvalue())
 
                     arquivo_backup = arquivo.with_name('backup.bin')
                     parametros = SimpleNamespace(baud=921600, mcu='se', eeprom_backup=True, output=arquivo_backup)
@@ -479,9 +490,62 @@ class TestesDaLogicaDosComandos(unittest.TestCase):
                     endereco_backup = 0x0803E000 + 4096 * (1 - indice)
                     self.assertIn(f'EEPROM 0x{endereco_backup:08X}', console.getvalue())
                     self.assertIn(f'backup da página selecionada em 0x{endereco_escolhido:08X}', console.getvalue())
+                    if criterio == 'sem geração identificável':
+                        self.assertIn('seleção pela área bruta', console.getvalue())
                 self.assertEqual(processador.leituras_de_registradores, list(enderecos) * 2)
                 self.assertEqual(processador.chamadas_de_apagamento, [])
                 self.assertEqual(processador.modos_de_reset_software, [0, 0])
+
+    def test_mapa_eeprom_autentica_hde1(self):
+        chave = bytes(range(1, 33))
+        registros = b'registros autenticados'
+        versao_tamanho = struct.pack('<HH', 1, len(registros))
+        geracao = struct.pack('<II', 2, 2 ^ 0xFFFFFFFF)
+        publicacao = b'\xA5\xFF\xFF\xFF'
+        cifra = AESSIV(chave).encrypt(registros, [versao_tamanho + geracao + publicacao])
+        pagina = cifra[16:].ljust(0xFE0, b'\xFF') + versao_tamanho + cifra[:16] + geracao + publicacao
+        apagada = b'\xFF' * 4096
+        configuracao = SimpleNamespace(portas_disponiveis=['COM1'])
+
+        for imagem, chave_usada, backup, erro in (
+                (pagina, chave, False, None),
+                (pagina, chave, True, None),
+                (pagina[:0xFE0] + b'\x02\x00' + pagina[0xFE2:], chave, False, 'Cabeçalho HDE1 inválido'),
+                (pagina[:0xFFC] + apagada[0xFFC:], chave, False, 'Cabeçalho HDE1 inválido'),
+                (pagina[:0xFF4] + struct.pack('<II', 3, 3 ^ 0xFFFFFFFF) + publicacao,
+                 chave, False, 'Falha na autenticação'),
+                (pagina, chave[::-1], False, 'Falha na autenticação'),
+        ):
+            with self.subTest(backup=backup, erro=erro), tempfile.TemporaryDirectory() as diretorio:
+                arquivo_chave = Path(diretorio) / 'chave.hex'
+                arquivo_chave.write_text(chave_usada.hex(), encoding='ascii')
+                saida = Path(diretorio) / 'registros.bin'
+                bruto = pagina + imagem if backup else imagem + apagada
+                processador = ProcessadorSimulado(valores_de_registradores={
+                    0x0803E000 + offset: struct.unpack_from('<I', bruto, offset)[0]
+                    for offset in range(0, len(bruto), 4)
+                })
+                parametros = SimpleNamespace(
+                    baud=921600, mcu='se', descriptografar=True, eeprom_backup=backup,
+                    output=saida if backup or erro else None,
+                )
+                with patch.dict(os.environ, {'ASR_ARQUIVO_CHAVE_EEPROM': str(arquivo_chave)}):
+                    with contextlib.redirect_stdout(io.StringIO()) as console:
+                        if erro:
+                            with self.assertRaisesRegex(CmdExcessao, erro):
+                                asr_mapa_memoria(parametros, processador, configuracao)
+                        else:
+                            self.assertEqual(asr_mapa_memoria(parametros, processador, configuracao), registros)
+                if erro:
+                    self.assertNotIn('EEPROM 0x', console.getvalue())
+                else:
+                    endereco = 0x0803F000 if backup else 0x0803E000
+                    self.assertIn(f'EEPROM 0x{endereco:08X}', console.getvalue())
+                    self.assertIn('registros auten', console.getvalue())
+                if backup:
+                    self.assertEqual(saida.read_bytes(), registros)
+                else:
+                    self.assertEqual(list(Path(diretorio).iterdir()), [arquivo_chave])
 
     @unittest.skipUnless(os.name == 'nt', 'Bloqueio de arquivo mapeado no Windows')
     def test_mapa_eeprom_preserva_dump_aberto_no_visualizador(self):
@@ -492,7 +556,7 @@ class TestesDaLogicaDosComandos(unittest.TestCase):
             caminho.write_bytes(anterior)
             with caminho.open('rb') as arquivo, mmap.mmap(arquivo.fileno(), 0, access=mmap.ACCESS_READ) as visualizador:
                 with contextlib.redirect_stdout(io.StringIO()) as console:
-                    salvo = _salvar_mapa_eeprom(caminho, pagina)
+                    salvo = salvar_mapa_eeprom(caminho, pagina)
                 self.assertEqual(visualizador[:], anterior)
                 self.assertIn('Arquivo anterior preservado', console.getvalue())
             self.assertNotEqual(salvo, caminho)

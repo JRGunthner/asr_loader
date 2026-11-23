@@ -231,7 +231,10 @@ def cli_adicionar_comando_linha_serial(subparsers, comando, linha, estado):
 def cli_montar_doctor(args, config, processador):
     diagnostico = cli_montar_diagnostico()
     portas_info = cast(List[Dict[str, object]], diagnostico['ports'])
-    portas = [str(porta.get('device')) for porta in portas_info if porta.get('device')]
+    portas = [
+        dispositivo for porta in portas_info
+        if isinstance(dispositivo := porta.get('device'), str) and dispositivo
+    ]
     total_portas = len(portas)
     rotulo_porta = 'porta detectada' if total_portas == 1 else 'portas detectadas'
     checks = [{
@@ -400,7 +403,7 @@ def cli_build_parser():
                                  help='modelo conhecido; evita a identificacao por apagamento da EEPROM')
         if comando == Comandos.MAPA_EEPROM.value:
             parser_mapa.add_argument('--descriptografar', action='store_true',
-                                     help='autenticar e exibir os dados HDE3 em claro (exige --mcu se)')
+                                     help='autenticar e exibir os dados HDE1 em claro (exige --mcu se)')
             modo_eeprom = parser_mapa.add_mutually_exclusive_group()
             modo_eeprom.add_argument('--eeprom-ab', action='store_true',
                                      help='ler as duas páginas da EEPROM do ASR6601SE (exige --mcu se)')
