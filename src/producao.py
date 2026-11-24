@@ -514,8 +514,13 @@ def gravar_producao(param, processador, config):
             # imagem foi verificado numa fronteira de página antes da conexão.
             processador.erase(FLASH_INICIO, len(firmware))
 
-            for offset in range(0, len(firmware), 512):
-                processador.flash(FLASH_INICIO + offset, firmware[offset:offset + 512])
+            print('Gravando', end='', flush=True)
+            try:
+                for deslocamento in range(0, len(firmware), 512):
+                    processador.flash(FLASH_INICIO + deslocamento, firmware[deslocamento:deslocamento + 512])
+                    print('.', end='', flush=True)
+            finally:
+                print(flush=True)
             processador.verify(FLASH_INICIO, len(firmware), zlib.crc32(firmware))
         except Exception:
             raise CmdExcessao('OTP confirmada. Falha ao gravar ou verificar o firmware') from None
